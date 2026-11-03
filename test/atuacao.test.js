@@ -77,3 +77,27 @@ test('criarAtuacao exige os campos obrigatórios e devolve os opcionais com padr
   assert.equal(a.situacao, 'ativa');
   assert.equal(a.fim, null);
 });
+
+// Revisão final I11
+test('I11: atuação encerrada não participa da árvore nem da validação; gerente antigo com fim não gera multiplas_raizes', () => {
+  const a = [
+    at({ id: 'gg-antigo', pessoaRef: 'GG1', organizacaoId: 'O', funcao: 'Gerente Geral', superiorId: null, ehRaiz: true, fim: '2026-06-30', situacao: 'encerrada' }),
+    at({ id: 'gg-novo', pessoaRef: 'GG2', organizacaoId: 'O', funcao: 'Gerente Geral', superiorId: null, ehRaiz: true }),
+    at({ id: 's', pessoaRef: 'S', organizacaoId: 'O', funcao: 'f', superiorId: 'gg-novo' }),
+    at({ id: 'x', pessoaRef: 'X', organizacaoId: 'O', funcao: 'f', superiorId: 'gg-antigo', fim: '2026-06-30', situacao: 'encerrada' }),
+  ];
+  assert.doesNotThrow(() => validarArvore(a, 'O'));
+  const r = arvore(a, 'O');
+  assert.equal(r.atuacao.id, 'gg-novo');
+  assert.deepEqual(r.filhos.map(f => f.atuacao.id), ['s']);
+  assert.equal(semSuperior(a, 'O').length, 0);
+});
+
+test('I11: atuação ativa apontando para superior encerrado é superior_inexistente na árvore corrente', () => {
+  const a = [
+    at({ id: 'r', pessoaRef: 'R', organizacaoId: 'O', funcao: 'f', superiorId: null, ehRaiz: true }),
+    at({ id: 'velho', pessoaRef: 'V', organizacaoId: 'O', funcao: 'f', superiorId: 'r', fim: '2026-01-01', situacao: 'encerrada' }),
+    at({ id: 'orfao', pessoaRef: 'F', organizacaoId: 'O', funcao: 'f', superiorId: 'velho' }),
+  ];
+  assert.throws(() => validarArvore(a, 'O'), e => e.codigo === 'superior_inexistente');
+});

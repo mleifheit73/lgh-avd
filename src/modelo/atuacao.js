@@ -16,7 +16,9 @@ export function criarAtuacao({ id, pessoaRef, organizacaoId, funcao, superiorId 
   return { id, pessoaRef, organizacaoId, funcao, superiorId, ehRaiz: !!ehRaiz, setor, turno, equipe, inicio, fim, situacao };
 }
 
-const daOrg = (atuacoes, organizacaoId) => atuacoes.filter(a => a.organizacaoId === organizacaoId);
+/** Atuação corrente: ativa e sem data de fim. Encerradas ficam no histórico e fora da árvore de hoje (spec 4.4). */
+const ehCorrente = a => a.situacao === 'ativa' && a.fim == null;
+const daOrg = (atuacoes, organizacaoId) => atuacoes.filter(a => a.organizacaoId === organizacaoId && ehCorrente(a));
 
 export function atuacoesDe(atuacoes, pessoaRef) {
   return atuacoes.filter(a => a.pessoaRef === pessoaRef);
@@ -29,7 +31,7 @@ export function semSuperior(atuacoes, organizacaoId) {
 
 export function validarArvore(atuacoes, organizacaoId) {
   const lista = daOrg(atuacoes, organizacaoId);
-  const porId = new Map(atuacoes.map(a => [a.id, a]));
+  const porId = new Map(atuacoes.filter(ehCorrente).map(a => [a.id, a]));   // superior encerrado conta como inexistente
   const raizes = lista.filter(a => a.ehRaiz);
 
   if (raizes.length === 0) throw new ErroArvore('sem_raiz', `A organização ${organizacaoId} não tem atuação raiz`, { organizacaoId });
