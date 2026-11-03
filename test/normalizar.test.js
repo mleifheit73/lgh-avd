@@ -31,3 +31,12 @@ test('separarEmpresas quebra a célula tripla da Gerente Fiscal', () => {
   const r = separarEmpresas('LSH BARRA EMPREENDIMENTOS IMOBILIÁRIOS SA, SIENA ADMINISTRAÇÃO E PARTICIPAÇÕES LTDA e LAGHETTO HOTEIS LTDA');
   assert.deepEqual(r, ['LSH BARRA EMPREENDIMENTOS IMOBILIARIOS', 'SIENA ADMINISTRACAO E PARTICIPACOES', 'LAGHETTO HOTEIS']);
 });
+
+// Revisão final I6: dataISO valida o calendário
+test('I6: dataISO rejeita data impossível e formato desconhecido', () => {
+  assert.equal(dataISO('31/02/2020'), null);
+  assert.equal(dataISO('2020-13-45'), null);
+  assert.equal(dataISO('O2/04/1974'), null);     // letra O no lugar do zero, caso real
+  assert.equal(dataISO('29/02/2024'), '2024-02-29');   // bissexto válido
+  assert.equal(dataISO('29/02/2023'), null);           // não bissexto
+});

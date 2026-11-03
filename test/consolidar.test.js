@@ -29,7 +29,11 @@ test('consolidar: contagem de pendências bate com o levantamento', () => {
   assert.equal(c('sem_cargo'), 7);
   assert.equal(c('sem_empresa'), 5);
   assert.equal(c('inicio_futuro'), 4);
-  assert.equal(pendencias.length, 44);
+  assert.equal(c('sem_nascimento'), 20);     // 19 vazios na PJ + 1 inválido (O2/04/1974)
+  assert.equal(c('sem_inicio'), 4);
+  assert.equal(c('possivel_duplicado'), 1);  // Tiago Boemeke: CLT com CPF, PJ sem CPF
+  assert.equal(c('cpf_repetido_na_pj'), 0);
+  assert.equal(pendencias.length, 69);
 });
 
 test('consolidar: total de pessoas = CLT + PJ - duplicados', () => {
@@ -74,4 +78,52 @@ test('consolidar: pessoa sem CPF recebe idProvisorio e nunca é fundida', () => 
   assert.match(pessoas[0].idProvisorio, /^sem-cpf-\d+$/);
   assert.notEqual(pessoas[0].idProvisorio, pessoas[1].idProvisorio);
   assert.equal(pessoas[0].status, 'pendente');
+});
+
+// Correções da revisão final
+const vazio = { grafiasOriginais: [], empresas: [], cargo: 'c', nascimento: '1990-01-01', inicio: '2020-01-01' };
+
+test('I4: pessoa sem CPF com o mesmo nome de uma pessoa com CPF recebe pendência possivel_duplicado', () => {
+  const clt = [{ regional: 'R1', filial: 'X', codigo: '1', chave: 'X|1', nome: 'TIAGO BOEMEKE DE OLIVEIRA', rg: null, cargoCod: '1', cargo: 'A', cpf: '11111111111', nascimento: '1990-01-01', admissao: '2020-01-01' }];
+  const pj = [{ ...vazio, nome: 'Tiago Boemeke de Oliveira', cpf: null, empresas: ['E'], grafiasOriginais: ['E'] }];
+  const { pessoas, pendencias } = consolidar(clt, pj, HOJE);
+  assert.equal(pessoas.length, 2);   // sem CPF nunca funde
+  const p = pendencias.find(x => x.codigo === 'possivel_duplicado');
+  assert.ok(p);
+  assert.match(p.pessoaRef, /^sem-cpf-/);
+  assert.match(p.detalhe, /11111111111/);
+});
+
+test('I5: CPF repetido dentro da PJ gera cpf_repetido_na_pj, e não tambem_na_base_clt', () => {
+  const pj = [{ ...vazio, nome: 'A', cpf: '22222222222', empresas: ['E'], grafiasOriginais: ['E'] },
+              { ...vazio, nome: 'A', cpf: '22222222222', empresas: ['F'], grafiasOriginais: ['F'] }];
+  const { pessoas, pendencias } = consolidar([], pj, HOJE);
+  assert.equal(pessoas.length, 1);
+  assert.equal(pendencias.filter(x => x.codigo === 'tambem_na_base_clt').length, 0);
+  assert.equal(pendencias.filter(x => x.codigo === 'cpf_repetido_na_pj').length, 1);
+});
+
+test('I6: data ausente ou inválida gera pendência, nunca some em silêncio', () => {
+  const pj = [{ ...vazio, nome: 'SEM NASC', cpf: '33333333333', nascimento: null, inicio: '2020-01-01', empresas: ['E'], grafiasOriginais: ['E'] },
+              { ...vazio, nome: 'SEM INICIO', cpf: '44444444444', nascimento: '1990-01-01', inicio: null, empresas: ['E'], grafiasOriginais: ['E'] }];
+  const { pendencias } = consolidar([], pj, HOJE);
+  assert.equal(pendencias.filter(x => x.codigo === 'sem_nascimento').length, 1);
+  assert.equal(pendencias.filter(x => x.codigo === 'sem_inicio').length, 1);
+});
+
+test('I7: contratação futura fica com status pendente, como o spec 4.3 manda', () => {
+  const pj = [{ ...vazio, nome: 'FUTURA', cpf: '55555555555', inicio: '2027-01-15', empresas: ['E'], grafiasOriginais: ['E'] }];
+  const { pessoas } = consolidar([], pj, HOJE);
+  assert.equal(pessoas[0].status, 'pendente');
+  assert.equal(pessoas[0].motivoStatus, 'inicio_futuro');
+});
+
+test('I8: empresa do vínculo é a chave normalizada nas duas bases, com a grafia original ao lado', () => {
+  const clt = [{ regional: 'R1', filial: 'LAGHETTO HOTÉIS LTDA FILIAL 21 - SÃO PAULO', codigo: '1', chave: 'k', nome: 'N', rg: null, cargoCod: '1', cargo: 'A', cpf: '66666666666', nascimento: '1990-01-01', admissao: '2020-01-01' }];
+  const pj = [{ ...vazio, nome: 'M', cpf: '77777777777', empresas: ['LAGHETTO HOTEIS FILIAL 21 SAO PAULO'], grafiasOriginais: ['LAGHETTO HOTEIS LTDA FILIAL 21 - SÃO PAULO'] }];
+  const { vinculos } = consolidar(clt, pj, HOJE);
+  assert.equal(vinculos[0].empresa, 'LAGHETTO HOTEIS FILIAL 21 SAO PAULO');
+  assert.equal(vinculos[0].empresaOriginal, 'LAGHETTO HOTÉIS LTDA FILIAL 21 - SÃO PAULO');
+  assert.equal(vinculos[1].empresa, vinculos[0].empresa);   // CLT e PJ casam pela chave
+  assert.equal(vinculos[1].empresaOriginal, 'LAGHETTO HOTEIS LTDA FILIAL 21 - SÃO PAULO');
 });

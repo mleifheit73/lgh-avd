@@ -22,15 +22,23 @@ export function cpfLimpo(texto) {
   return d.length === 11 ? d : null;
 }
 
-/** Aceita DD/MM/YYYY e YYYY-MM-DD (com ou sem hora); devolve YYYY-MM-DD ou null. */
+/** Aceita DD/MM/YYYY e YYYY-MM-DD (com ou sem hora); devolve YYYY-MM-DD ou null. Valida o calendário. */
 export function dataISO(texto) {
   if (texto == null) return null;
   const t = String(texto).trim();
-  let m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  return null;
+  let a, m, d;
+  let r = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (r) { d = +r[1]; m = +r[2]; a = +r[3]; }
+  else {
+    r = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!r) return null;
+    a = +r[1]; m = +r[2]; d = +r[3];
+  }
+  if (m < 1 || m > 12 || d < 1) return null;
+  const diasNoMes = new Date(Date.UTC(a, m, 0)).getUTCDate();   // dia 0 do mês seguinte = último dia do mês
+  if (d > diasNoMes) return null;
+  const p = n => String(n).padStart(2, '0');
+  return `${a}-${p(m)}-${p(d)}`;
 }
 
 /** Quebra uma célula com várias empresas (vírgula ou " e " antes de maiúscula) em chaves únicas. */
