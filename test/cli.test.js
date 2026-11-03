@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const TEM_DADOS = fs.existsSync(new URL('../data/clt/R1.csv', import.meta.url)) && fs.existsSync(new URL('../data/pj/pj-2026.json', import.meta.url));
+const soComDados = { skip: TEM_DADOS ? false : 'data/ ausente: copie os dados reais do Projeto (ver README)' };
 import { execFileSync } from 'node:child_process';
 
 const raiz = new URL('..', import.meta.url).pathname;
 
-test('CLI gera out/base.json com os totais do levantamento', () => {
+test('CLI gera out/base.json com os totais do levantamento', soComDados, () => {
   const saida = execFileSync('node', ['src/cli/carga.js', 'data/clt/R1.csv', 'data/clt/R2.csv', 'data/clt/R3.csv', 'data/pj/pj-2026.json'], { cwd: raiz, encoding: 'utf8' });
   const b = JSON.parse(fs.readFileSync(raiz + 'out/base.json', 'utf8'));
   assert.equal(b.pessoas.length, 1822);
@@ -27,7 +29,7 @@ test('CLI sem argumentos sai com código 1 e mensagem de uso', () => {
 // Revisão final I9
 const limpar = () => { fs.mkdirSync(raiz + 'out', { recursive: true }); fs.rmSync(raiz + 'out/nao-deve-existir.json', { force: true }); };
 
-test('I9: regional com zero registros derruba a carga com código 2 e mensagem nomeando a regional', () => {
+test('I9: regional com zero registros derruba a carga com código 2 e mensagem nomeando a regional', soComDados, () => {
   limpar();
   fs.writeFileSync(raiz + 'out/vazio.csv', '');
   assert.throws(() => execFileSync('node', ['src/cli/carga.js', 'data/clt/R1.csv', 'out/vazio.csv', 'data/clt/R3.csv', 'data/pj/pj-2026.json', 'out/nao-deve-existir.json'], { cwd: raiz, encoding: 'utf8', stdio: 'pipe' }),
@@ -35,13 +37,13 @@ test('I9: regional com zero registros derruba a carga com código 2 e mensagem n
   assert.equal(fs.existsSync(raiz + 'out/nao-deve-existir.json'), false);
 });
 
-test('I9: o mesmo arquivo passado duas vezes derruba a carga com código 2', () => {
+test('I9: o mesmo arquivo passado duas vezes derruba a carga com código 2', soComDados, () => {
   limpar();
   assert.throws(() => execFileSync('node', ['src/cli/carga.js', 'data/clt/R1.csv', 'data/clt/R1.csv', 'data/clt/R3.csv', 'data/pj/pj-2026.json', 'out/nao-deve-existir.json'], { cwd: raiz, encoding: 'utf8', stdio: 'pipe' }),
     e => e.status === 2 && /mesmo conteúdo/.test(e.stderr));
 });
 
-test('I9: erro de total divergente no parser derruba a carga com código 3', () => {
+test('I9: erro de total divergente no parser derruba a carga com código 3', soComDados, () => {
   const csv = ';LAGHETTO X;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;1/1;;;\n1;;;UM;;;;;;;;1;;;;;;;84 - GARCOM;;;;;11111111111;;;;01/01/1990;;;;01/01/2020;\n;Total de empregados: ;;;;;;;;;;;;;;;;;;;;;;;;;5;\n';
   limpar();
   fs.writeFileSync(raiz + 'out/divergente.csv', csv);

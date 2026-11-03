@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const TEM_DADOS = fs.existsSync(new URL('../data/clt/R1.csv', import.meta.url)) && fs.existsSync(new URL('../data/pj/pj-2026.json', import.meta.url));
+const soComDados = { skip: TEM_DADOS ? false : 'data/ ausente: copie os dados reais do Projeto (ver README)' };
 import { parseCLT } from '../src/carga/clt.js';
 import { parsePJ } from '../src/carga/pj.js';
 import { consolidar } from '../src/carga/consolidar.js';
@@ -10,7 +12,7 @@ const cltReal = () => ['R1', 'R2', 'R3'].flatMap(r => parseCLT(lerData(`clt/${r}
 const pjReal = () => parsePJ(JSON.parse(lerData('pj/pj-2026.json')).linhas).registros;
 const HOJE = { hoje: '2026-11-03' };
 
-test('consolidar funde os 10 CPFs presentes nas duas bases em uma pessoa cada', () => {
+test('consolidar funde os 10 CPFs presentes nas duas bases em uma pessoa cada', soComDados, () => {
   const { pessoas, vinculos, pendencias } = consolidar(cltReal(), pjReal(), HOJE);
   const dup = pendencias.filter(p => p.codigo === 'tambem_na_base_clt');
   assert.equal(dup.length, 10);
@@ -21,7 +23,7 @@ test('consolidar funde os 10 CPFs presentes nas duas bases em uma pessoa cada', 
   }
 });
 
-test('consolidar: contagem de pendências bate com o levantamento', () => {
+test('consolidar: contagem de pendências bate com o levantamento', soComDados, () => {
   const { pendencias } = consolidar(cltReal(), pjReal(), HOJE);
   const c = cod => pendencias.filter(p => p.codigo === cod).length;
   assert.equal(c('multiplas_empresas'), 12);
@@ -36,7 +38,7 @@ test('consolidar: contagem de pendências bate com o levantamento', () => {
   assert.equal(pendencias.length, 69);
 });
 
-test('consolidar: total de pessoas = CLT + PJ - duplicados', () => {
+test('consolidar: total de pessoas = CLT + PJ - duplicados', soComDados, () => {
   const clt = cltReal();
   const { pessoas, vinculos } = consolidar(clt, pjReal(), HOJE);
   const pessoasClt = new Set(clt.map(r => r.cpf)).size;   // 1606: duas pessoas têm vínculo CLT em dois CNPJs (spec 4.2)
@@ -47,7 +49,7 @@ test('consolidar: total de pessoas = CLT + PJ - duplicados', () => {
   assert.equal(vinculos.filter(v => v.regime === 'PJ').length, esperadoPJ);
 });
 
-test('consolidar: vínculos PJ = um por (pessoa, empresa); pessoa sem empresa gera um vínculo sem empresa', () => {
+test('consolidar: vínculos PJ = um por (pessoa, empresa); pessoa sem empresa gera um vínculo sem empresa', soComDados, () => {
   const { vinculos } = consolidar([], pjReal(), HOJE);
   const pj = vinculos.filter(v => v.regime === 'PJ');
   const porPessoa = {};
@@ -58,8 +60,8 @@ test('consolidar: vínculos PJ = um por (pessoa, empresa); pessoa sem empresa ge
 });
 
 test('consolidar normaliza CPF e prefere o nome da base CLT, guardando o outro', () => {
-  const clt = [{ regional: 'R1', filial: 'X', codigo: '1', chave: 'X|1', nome: 'ADELIA GOMES MENESES', rg: null, cargoCod: '1', cargo: 'A', cpf: '00000000006', nascimento: '1986-08-15', admissao: '2020-01-01' }];
-  const pj  = [{ nome: 'Adélia Gomes Meneses', cargo: 'B', cpf: '00000000006', nascimento: '1986-08-15', inicio: '2026-09-28', empresas: ['E'], grafiasOriginais: ['E'] }];
+  const clt = [{ regional: 'R1', filial: 'X', codigo: '1', chave: 'X|1', nome: 'ADELIA GOMES MENESES', rg: null, cargoCod: '1', cargo: 'A', cpf: '00000000005', nascimento: '1970-01-05', admissao: '2020-01-01' }];
+  const pj  = [{ nome: 'Adélia Gomes Meneses', cargo: 'B', cpf: '00000000005', nascimento: '1970-01-05', inicio: '2026-09-28', empresas: ['E'], grafiasOriginais: ['E'] }];
   const { pessoas, vinculos } = consolidar(clt, pj, HOJE);
   assert.equal(pessoas.length, 1);
   assert.equal(pessoas[0].nome, 'ADELIA GOMES MENESES');

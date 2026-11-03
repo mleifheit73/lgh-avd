@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const TEM_DADOS = fs.existsSync(new URL('../data/clt/R1.csv', import.meta.url)) && fs.existsSync(new URL('../data/pj/pj-2026.json', import.meta.url));
+const soComDados = { skip: TEM_DADOS ? false : 'data/ ausente: copie os dados reais do Projeto (ver README)' };
 import { parseCLT } from '../src/carga/clt.js';
 
 const lerFixture = n => fs.readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -46,7 +48,7 @@ test('parseCLT ignora BOM', () => {
   assert.deepEqual(parseCLT(semBom, 'R1').registros, parseCLT(comBom, 'R1').registros);
 });
 
-test('parseCLT sobre os três CSVs reais fecha em 1608 e zero colisão de chave', () => {
+test('parseCLT sobre os três CSVs reais fecha em 1608 e zero colisão de chave', soComDados, () => {
   const todos = ['R1', 'R2', 'R3'].flatMap(r => parseCLT(lerData(`clt/${r}.csv`), r).registros);
   assert.equal(todos.length, 1608);
   assert.equal(new Set(todos.map(x => x.filial)).size, 37);
@@ -93,7 +95,7 @@ test('I1: total de empregados divergente da contagem gera erro no log, com a fil
   assert.match(erro.mensagem, /encontrou 1/);
 });
 
-test('I1: linhas estruturais conhecidas não geram aviso; sobre os CSVs reais, zero não reconhecida e zero total divergente', () => {
+test('I1: linhas estruturais conhecidas não geram aviso; sobre os CSVs reais, zero não reconhecida e zero total divergente', soComDados, () => {
   const log = ['R1', 'R2', 'R3'].flatMap(r => parseCLT(lerData(`clt/${r}.csv`), r).log);
   assert.equal(log.filter(l => l.codigo === 'linha_nao_reconhecida').length, 0);
   assert.equal(log.filter(l => l.codigo === 'total_divergente').length, 0);

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const TEM_DADOS = fs.existsSync(new URL('../data/clt/R1.csv', import.meta.url)) && fs.existsSync(new URL('../data/pj/pj-2026.json', import.meta.url));
+const soComDados = { skip: TEM_DADOS ? false : 'data/ ausente: copie os dados reais do Projeto (ver README)' };
 import { parsePJ } from '../src/carga/pj.js';
 
 const lerFixture = n => JSON.parse(fs.readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8'));
@@ -16,7 +18,7 @@ test('parsePJ descarta cabeçalho repetido e linha vazia, registra no log', () =
 test('parsePJ limpa CPF mascarado e converte datas', () => {
   const r = parsePJ(lerFixture('pj-mini.json').linhas).registros.find(x => x.nome === 'BRUNO MASCARADO');
   assert.equal(r.cpf, '00000000002');
-  assert.equal(r.nascimento, '1976-04-06');
+  assert.equal(r.nascimento, '1970-01-02');
   assert.equal(r.inicio, '2026-09-17');
   assert.deepEqual(r.empresas, ['LSH BARRA EMPREENDIMENTOS IMOBILIARIOS']);
 });
@@ -41,7 +43,7 @@ test('parsePJ: equivalência agrupa grafias por empresa normalizada', () => {
   assert.deepEqual(equivalencia['LAGHETTO HOTEIS'].sort(), ['LAGHETTO HOTEIS LTDA', 'LAGHETTO HOTÉIS LTDA']);
 });
 
-test('parsePJ sobre a planilha real: 226 válidos, 40 empresas, 6 com grafia múltipla', () => {
+test('parsePJ sobre a planilha real: 226 válidos, 40 empresas, 6 com grafia múltipla', soComDados, () => {
   const { registros, equivalencia, log } = parsePJ(lerData('pj/pj-2026.json').linhas);
   assert.equal(registros.length, 226);
   assert.equal(log.filter(l => l.codigo === 'cabecalho_repetido').length, 2);   // o conversor já removeu o cabeçalho verdadeiro
