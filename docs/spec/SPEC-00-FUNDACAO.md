@@ -102,10 +102,11 @@ Exemplos verificados contra a realidade da rede:
 
 A árvore é derivada, nunca desenhada e nunca armazenada como desenho. É a recursão sobre o campo superior das atuações de uma organização.
 
-Invariantes:
+Invariantes (sobre as atuações correntes, isto é, ativas e sem data de fim; as encerradas ficam no histórico e fora da árvore de hoje):
 - Nenhuma atuação é superior de si mesma, direta ou indiretamente (sem ciclos)
-- Toda organização tem exatamente uma atuação raiz (superior nulo)
-- Uma atuação tem no máximo um superior
+- Toda organização tem exatamente uma atuação raiz, marcada explicitamente como raiz (`ehRaiz`) e sem superior
+- Uma atuação tem no máximo um superior, e ele pertence à mesma organização e está corrente
+- Atuação sem superior e sem marca de raiz não é erro de validação: é pendência, e é o que trava a abertura do ciclo (seção 7.4)
 
 ### 3.6 Snapshot de ciclo
 
@@ -146,12 +147,17 @@ Identidade do vínculo CLT: filial mais código. Código isolado produz 417 coli
 |---|---|---|
 | Mesmo CPF nas duas bases | 10 | Uma pessoa, dois vínculos anexados, marca de pendência. **O sistema não escolhe regime.** |
 | Mesma empresa com grafias diferentes | 6 empresas com grafia duplicada, 46 grafias para 40 empresas | Normalização por regra, tabela de equivalência gerada e submetida ao RH |
-| Cabeçalho repetido no meio da planilha | 3 linhas | Descartadas na carga, registradas no log |
+| Cabeçalho repetido no meio da planilha | 2 linhas (a contagem de 3 em 03/11 incluía o cabeçalho verdadeiro) | Descartadas na carga, registradas no log |
 | Pessoa contratada por várias empresas na mesma célula | 12 | Quebra em vínculos contratuais separados |
 | Sem CPF | 6 | Entra na fila de pendências. Sem CPF não há login |
 | Sem cargo | 7 | Entra na fila de pendências |
 | Sem empresa | 5 | Entra na fila de pendências |
 | Contratação futura (início posterior a 03/11/2026) | 4 | Cadastrada com situação pendente, fora de ciclo até a data de início |
+| Data de nascimento ausente ou inválida | 20 (19 vazias na PJ, 1 digitada com letra O no lugar do zero) | Pendência `sem_nascimento`. Nunca silêncio |
+| Data de início ausente | 4 | Pendência `sem_inicio` |
+| Pessoa sem CPF com nome igual ao de pessoa com CPF | 1 (Tiago Boemeke de Oliveira, CLT com CPF e PJ sem) | Pendência `possivel_duplicado`. O sistema não funde sem CPF; o RH decide |
+| RG com hífen confundido com cargo pelo parser | 3 (bug herdado do script de outubro, corrigido em 03/11) | Âncora do cargo exige letra após o hífen |
+| CLT com 1.608 linhas mas 1.606 pessoas | 2 pessoas com vínculo em dois CNPJs | Dois vínculos da mesma pessoa, como previsto em 4.2 |
 
 Nenhum destes é descartado em silêncio. Todos aparecem em tela para o RH resolver.
 
@@ -159,12 +165,14 @@ Nenhum destes é descartado em silêncio. Todos aparecem em tela para o RH resol
 
 Carga manual por upload nesta fase, com integração automática prevista para depois (registrado na ata de 22/10). Toda carga nova compara por CPF, preserva histórico e joga admitidos sem atuação na fila de pendências da unidade.
 
+**Proteções da carga (adicionadas na revisão de 03/11):** a linha de filial é reconhecida pela estrutura do export, não por lista de nomes, para razão social nova não cair na filial anterior; toda linha com conteúdo vai para registro, estrutura conhecida ou log, nunca some; o "Total de empregados" de cada filial é conferido e divergência aborta a carga; regional com zero registros ou arquivo repetido aborta a carga; pessoa sem CPF fica fora da comparação entre cargas, porque não tem identidade estável.
+
 **Desligamento (D11).** Pessoa presente na carga anterior e ausente da nova é marcada como **inativa, por inferência da carga de DD/MM**. Nada é apagado: as atuações recebem data de fim, as avaliações ficam amarradas aos ciclos, e a pessoa passa a aparecer no repositório de inativos, que é uma visão filtrada e não uma cópia. O acesso é revogado no mesmo ato.
 
 Três proteções obrigatórias:
 - A comparação é por CPF sobre o **conjunto inteiro** da carga (R1, R2 e R3 juntos), nunca arquivo por arquivo. Pessoa transferida entre filiais ou com dois CNPJs não pode virar inativa por engano.
 - A inativação é rotulada como inferida, e o RH pode reverter.
-- **Trava contra inativação em massa:** se a carga propuser inativar mais do que o limite configurado (padrão: 5% da organização ou 10 pessoas, o que for menor), o sistema segura todas as inativações daquela organização e pede confirmação do RH antes de aplicar. Exportar uma filial a menos por engano não pode cortar o acesso de 40 pessoas.
+- **Trava contra inativação em massa:** se a carga propuser inativar mais do que o limite configurado (padrão: 5% da organização ou 10 pessoas, o que for menor), o sistema segura todas as inativações daquela organização e pede confirmação do RH antes de aplicar. Exportar uma filial a menos por engano não pode cortar o acesso de 40 pessoas. **A trava é da pessoa:** quem atua em duas organizações e tem uma delas travada não é inativado em nenhuma, porque a revogação de acesso é uma só.
 
 ---
 
