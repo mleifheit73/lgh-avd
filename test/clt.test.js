@@ -56,3 +56,58 @@ test('parseCLT sobre os três CSVs reais fecha em 1608 e zero colisão de chave'
   assert.equal(Object.values(porCodigo).filter(v => v > 1).length, 417);   // 417 códigos que se repetem (spec 4.2)
   assert.equal(todos.filter(x => !x.cpf).length, 0);
 });
+
+// Correções da revisão final (C1, I1)
+test('C1: filial com razão social fora da lista de prefixos é reconhecida pela estrutura (Página:)', () => {
+  const csv = '﻿;VIVERONE CANELA HOTEL LTDA;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;1/1;;;\n' +
+              'Código;;;;Nome;;;;;;;RG;;;;;;;Cargo;;;;;CPF;;;Nascimento;;;;;Admissão;\n' +
+              '7;;;PESSOA DA VIVERONE;;;;;;;;1234567890;;;;;;;84 - GARCOM;;;;;12345678901;;;;01/01/1990;;;;01/01/2020;\n' +
+              ';Total de empregados: ;;;;;;;;;;;;;;;;;;;;;;;;;1;\n';
+  const { registros, log } = parseCLT(csv, 'R1');
+  assert.equal(registros.length, 1);
+  assert.equal(registros[0].filial, 'VIVERONE CANELA HOTEL LTDA');
+  assert.equal(log.filter(l => l.nivel === 'erro').length, 0);
+});
+
+test('I1: linha com conteúdo não reconhecida vai para o log, nunca some em silêncio', () => {
+  const csv = ';LAGHETTO X;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;1/1;;;\n' +
+              '380A;;;CODIGO COM LETRA;;;;;;;;1;;;;;;;84 - GARCOM;;;;;12345678901;;;;01/01/1990;;;;01/01/2020;\n' +
+              ';Total de empregados: ;;;;;;;;;;;;;;;;;;;;;;;;;0;\n';
+  const { registros, log } = parseCLT(csv, 'R1');
+  assert.equal(registros.length, 0);
+  const naoClassificada = log.find(l => l.codigo === 'linha_nao_reconhecida');
+  assert.ok(naoClassificada, 'linha 380A deve ir ao log como não reconhecida');
+  assert.equal(naoClassificada.linha, 2);
+});
+
+test('I1: total de empregados divergente da contagem gera erro no log, com a filial', () => {
+  const csv = ';LAGHETTO X;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;1/1;;;\n' +
+              '1;;;UM;;;;;;;;1;;;;;;;84 - GARCOM;;;;;11111111111;;;;01/01/1990;;;;01/01/2020;\n' +
+              ';Total de empregados: ;;;;;;;;;;;;;;;;;;;;;;;;;2;\n';
+  const { log } = parseCLT(csv, 'R1');
+  const erro = log.find(l => l.codigo === 'total_divergente');
+  assert.ok(erro);
+  assert.equal(erro.nivel, 'erro');
+  assert.match(erro.mensagem, /LAGHETTO X/);
+  assert.match(erro.mensagem, /esperava 2/);
+  assert.match(erro.mensagem, /encontrou 1/);
+});
+
+test('I1: linhas estruturais conhecidas não geram aviso; sobre os CSVs reais, zero não reconhecida e zero total divergente', () => {
+  const log = ['R1', 'R2', 'R3'].flatMap(r => parseCLT(lerData(`clt/${r}.csv`), r).log);
+  assert.equal(log.filter(l => l.codigo === 'linha_nao_reconhecida').length, 0);
+  assert.equal(log.filter(l => l.codigo === 'total_divergente').length, 0);
+  assert.equal(log.filter(l => l.codigo === 'total_conferido').length, 37);
+});
+
+test('C1: filial com mais de uma página não zera a contagem no cabeçalho repetido', () => {
+  const csv = ';LAGHETTO X;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;1/2;;;\n' +
+              '1;;;UM;;;;;;;;1;;;;;;;84 - GARCOM;;;;;11111111111;;;;01/01/1990;;;;01/01/2020;\n' +
+              ';LAGHETTO X;;;;;;;;;;;;;;;;;;;;;;;;;Página:;;;;2/2;;;\n' +
+              '2;;;DOIS;;;;;;;;2;;;;;;;84 - GARCOM;;;;;22222222222;;;;01/01/1990;;;;01/01/2020;\n' +
+              ';Total de empregados: ;;;;;;;;;;;;;;;;;;;;;;;;;2;\n';
+  const { registros, log } = parseCLT(csv, 'R1');
+  assert.equal(registros.length, 2);
+  assert.equal(log.filter(l => l.codigo === 'total_divergente').length, 0);
+  assert.equal(log.filter(l => l.codigo === 'total_conferido').length, 1);
+});
