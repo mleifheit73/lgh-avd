@@ -67,3 +67,30 @@ test('trava é por organização: uma travada não bloqueia outra aplicável', (
   assert.equal(d.aplicaveis.length, 2);
   assert.ok(d.aplicaveis.every(x => x.organizacaoId === 'A'));
 });
+
+// Correções da revisão final
+test('I2: pessoa em duas organizações, uma travada: nenhuma inativação dela é aplicável', () => {
+  const a = Array.from({ length: 20 }, (_, i) => ({ cpf: `A-${i}`, filial: 'A' }));
+  const b = Array.from({ length: 101 }, (_, i) => ({ cpf: `B-${i}`, filial: 'B' }));
+  const ant = { ...consolidado(a.concat(b)), };
+  ant.pessoas.push({ cpf: 'x', nome: 'X', status: 'ativo', nomesAlternativos: [] });
+  ant.vinculos.push({ pessoaRef: 'x', regime: 'CLT', empresa: 'A', filial: 'A' }, { pessoaRef: 'x', regime: 'PJ', empresa: 'B', filial: 'B' });
+  const nov = consolidado(a.concat(b.slice(0, 91)));   // somem x e 10 de B
+  const d = diffCarga(ant, nov, OPC);
+  assert.deepEqual(d.travadas.map(t => t.organizacaoId).sort(), ['B']);
+  assert.equal(d.aplicaveis.filter(i => i.pessoaRef === 'x').length, 0, 'x não pode ser aplicável enquanto B está travada');
+  assert.ok(d.travadas[0].pessoas.includes('x'));
+});
+
+test('I3: pessoa sem CPF não entra no diff; vai para semIdentidade', () => {
+  const ant = consolidado([{ cpf: '1', filial: 'A' }]);
+  ant.pessoas.push({ cpf: null, idProvisorio: 'sem-cpf-1', nome: 'SEM', status: 'pendente', nomesAlternativos: [] });
+  ant.vinculos.push({ pessoaRef: 'sem-cpf-1', regime: 'PJ', empresa: 'A', filial: 'A' });
+  const nov = consolidado([{ cpf: '1', filial: 'A' }]);
+  nov.pessoas.push({ cpf: null, idProvisorio: 'sem-cpf-1', nome: 'OUTRA', status: 'pendente', nomesAlternativos: [] });
+  const d = diffCarga(ant, nov, OPC);
+  assert.equal(d.inativacoesPropostas.length, 0);
+  assert.equal(d.novos.length, 0);
+  assert.equal(d.semIdentidade.anterior.length, 1);
+  assert.equal(d.semIdentidade.nova.length, 1);
+});
