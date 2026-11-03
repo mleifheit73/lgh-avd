@@ -3,6 +3,7 @@
  * É o único módulo, além dos testes, que toca disco. Toda a regra está em src/carga e src/modelo.
  *
  * Uso: node src/cli/carga.js <R1.csv> <R2.csv> <R3.csv> <pj.json> [saida.json]
+ * Códigos de saída: 1 uso incorreto; 2 regional vazia ou arquivo repetido; 3 erro do parser (total divergente). Nada é gravado nesses casos.
  *
  * ATENÇÃO: a saída contém CPF em texto aberto e fica em out/, que é ignorado pelo git e nunca é publicado.
  */
@@ -22,10 +23,26 @@ const hoje = new Date().toISOString().slice(0, 10);
 
 const log = [];
 const clt = [];
+const conteudos = new Map();
 for (const [arquivo, regional] of [[r1, 'R1'], [r2, 'R2'], [r3, 'R3']]) {
-  const r = parseCLT(fs.readFileSync(arquivo, 'utf8'), regional);
+  const texto = fs.readFileSync(arquivo, 'utf8');
+  // Mesmo conteúdo em duas regionais: quase sempre o mesmo arquivo passado duas vezes.
+  for (const [outraRegional, outroTexto] of conteudos) {
+    if (outroTexto === texto) { console.error(`Erro: ${regional} (${arquivo}) tem o mesmo conteúdo de ${outraRegional}. Carga abortada.`); process.exit(2); }
+  }
+  conteudos.set(regional, texto);
+  const r = parseCLT(texto, regional);
+  // Regional sem ninguém é export errado, não demissão em massa.
+  if (r.registros.length === 0) { console.error(`Erro: ${regional} (${arquivo}) produziu zero registros. Carga abortada.`); process.exit(2); }
   clt.push(...r.registros);
   log.push(...r.log.map(l => ({ ...l, fonte: path.basename(arquivo) })));
+}
+// Erro do parser (total divergente) é dado em que não se pode confiar: não grava.
+const errosParser = log.filter(l => l.nivel === 'erro');
+if (errosParser.length) {
+  console.error(`Erro: ${errosParser.length} erro(s) do parser. Carga abortada sem gravar.`);
+  for (const e of errosParser) console.error(`  [${e.codigo}] ${e.fonte}: ${e.mensagem}`);
+  process.exit(3);
 }
 const pj = parsePJ(JSON.parse(fs.readFileSync(pjPath, 'utf8')).linhas);
 log.push(...pj.log.map(l => ({ ...l, fonte: path.basename(pjPath) })));
