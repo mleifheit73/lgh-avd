@@ -4242,8 +4242,44 @@ Regras:
 })();
 </script>
 
-
-
-
-
-
+<!-- ===== BLOCO VERSÃO (04/11/2026, pedido de Marcelo): selo discreto ao lado de "Protótipo" com o número da versão e o
+     commit do build. "latest" só quando o banco do artefato (config/versao, gravado a cada publicação) diz que esta é a
+     publicada mais recente; versão maior no banco: "desatualizada"; sem banco: só o número. Bloco independente. ===== -->
+<style id="bloco-versao-css">
+.pill.versao{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none;font-family:var(--f-mono,monospace);font-size:.62rem;padding:2px 7px;line-height:1.2;margin-left:4px;opacity:.85}
+.pill.versao[data-estado="latest"]{border-color:var(--accent-soft);color:var(--accent-ink)}
+.pill.versao[data-estado="desatualizada"]{border-color:var(--crit);color:var(--crit)}
+@media (max-width:640px){.pill.versao{display:none}}
+</style>
+<script id="bloco-versao">
+(function(){
+  /* o build (scripts/build-app.mjs) troca os marcadores; no arquivo fonte eles ficam como estão */
+  const V = { numero: '__VERSAO_NUMERO__', commit: '__VERSAO_COMMIT__', data: '__VERSAO_DATA__' };
+  const limpo = x => /^__/.test(String(x)) ? null : x;
+  window.VERSAO_APP = { numero: limpo(V.numero), commit: limpo(V.commit), data: limpo(V.data) };
+  const pill = document.querySelector('header.top .pill');
+  if(!pill) return;
+  const selo = document.createElement('span');
+  selo.className = 'pill versao'; selo.id = 'versao-app';
+  const texto = (estado) => `v${window.VERSAO_APP.numero ?? '?'} · ${window.VERSAO_APP.commit ?? 'sem build'}${estado ? ' · ' + estado : ''}`;
+  selo.textContent = texto('');
+  selo.title = window.VERSAO_APP.data ? `Build de ${window.VERSAO_APP.data}` : 'Arquivo fonte, sem build';
+  pill.insertAdjacentElement('afterend', selo);
+  async function conferir(){
+    const db = window.LGH_DB; if(!db || window.VERSAO_APP.numero == null) return;
+    selo.textContent = texto(''); delete selo.dataset.estado;
+    try{
+      const snap = await db.doc('config/versao').get();
+      const d = snap && snap.exists && typeof snap.data === 'function' ? snap.data() : null;
+      if(!d || d.numero == null) return;
+      const minha = Number(window.VERSAO_APP.numero), atual = Number(d.numero);
+      const estado = atual > minha ? 'desatualizada' : atual === minha ? 'latest' : '';
+      selo.textContent = texto(estado); selo.dataset.estado = estado;
+      if(estado === 'desatualizada') selo.title = `Existe a versão v${atual} publicada (${d.commit || ''}). Esta é a v${minha}.`;
+    }catch(e){ /* sem leitura, fica só o número */ }
+  }
+  document.addEventListener('lgh-db-pronto', conferir);
+  if(window.LGH_DB) conferir();
+  window.LGH_VERSAO = { conferir };
+})();
+</script>

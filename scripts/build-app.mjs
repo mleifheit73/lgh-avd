@@ -197,10 +197,11 @@ function principal() {
 
   fs.mkdirSync(path.join(dirApp, 'data'), { recursive: true });
 
+  let commit = 'desconhecido';
+  try { commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: raiz, encoding: 'utf8' }).trim(); } catch { /* fora do git */ }
+
   // 2. base pública
   if (fs.existsSync(rel('out/base.json'))) {
-    let commit = 'desconhecido';
-    try { commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: raiz, encoding: 'utf8' }).trim(); } catch { /* fora do git */ }
     let segredo;
     try { ({ segredo } = lerOuCriarSegredo(caminhoSegredo)); }
     catch (e) { console.error(`Build abortado: ${e.message}.`); process.exit(5); }
@@ -221,6 +222,20 @@ function principal() {
   // 4. dist/ e 5. varredura
   fs.rmSync(dirDist, { recursive: true, force: true });
   copiarArvore(dirApp, dirDist);
+  // 4b. selo de versão (bloco-versao): número de app/versao.json, commit curto e data do build
+  {
+    const arqVersao = path.join(dirApp, 'versao.json');
+    const numero = fs.existsSync(arqVersao) ? JSON.parse(fs.readFileSync(arqVersao, 'utf8')).numero : null;
+    const idx = path.join(dirDist, 'index.html');
+    if (fs.existsSync(idx) && numero != null) {
+      const html = fs.readFileSync(idx, 'utf8')
+        .replace("'__VERSAO_NUMERO__'", JSON.stringify(String(numero)))
+        .replace("'__VERSAO_COMMIT__'", JSON.stringify(String(commit || 'sem-git').slice(0, 7)))
+        .replace("'__VERSAO_DATA__'", JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')));
+      fs.writeFileSync(idx, html);
+      console.log(`selo de versão: v${numero} · ${String(commit || 'sem-git').slice(0, 7)}`);
+    }
+  }
   const achados = varrerVazamento(dirDist);
   if (achados.length) {
     fs.rmSync(dirDist, { recursive: true, force: true });
