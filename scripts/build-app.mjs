@@ -44,6 +44,19 @@ export function normalizarNome(n) {
   return String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 }
 
+/** Listas explícitas: campo novo na base com CPF só chega à base pública se for incluído aqui de propósito. */
+export const CAMPOS_VINCULO = ['regime', 'empresa', 'empresaOriginal', 'cargo', 'inicio', 'filial', 'codigo', 'chave'];
+export const CAMPOS_PENDENCIA = ['codigo', 'detalhe'];
+
+/** Textos livres (detalhe das pendências) citam CPF de outras pessoas: troca pelo id público, ou por marcador. */
+export function mascarar(s, idPorRef = new Map()) {
+  if (typeof s !== 'string') return s;
+  return s.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, (c) => {
+    const id = idPorRef.get(c) || idPorRef.get(c.replace(/\D/g, ''));
+    return id ? `[pessoa ${id}]` : '[CPF omitido]';
+  });
+}
+
 /** Converte a base com CPF (out/base.json) na base pública. */
 export function baseParaPublico(b, referencia = new Date(), commit = 'desconhecido') {
   const idPorRef = new Map();
@@ -58,23 +71,19 @@ export function baseParaPublico(b, referencia = new Date(), commit = 'desconheci
       faixaEtaria: faixaEtaria(p.nascimento, referencia), nomesAlternativos: p.nomesAlternativos || [],
     };
   });
-  // Textos livres (detalhe das pendências) citam CPF de outras pessoas: troca pelo id público, ou por marcador.
-  const mascarar = (s) => (typeof s !== 'string' ? s : s.replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, (c) => {
-    const id = idPorRef.get(c) || idPorRef.get(c.replace(/\D/g, ''));
-    return id ? `[pessoa ${id}]` : '[CPF omitido]';
-  }));
-  const converter = ({ pessoaRef, ...resto }) => {
-    const pessoaId = idPorRef.get(pessoaRef);
+  const converter = (campos) => (item) => {
+    const pessoaId = idPorRef.get(item.pessoaRef);
     if (!pessoaId) throw new Error('pessoaRef sem pessoa correspondente na base');
-    for (const k of Object.keys(resto)) resto[k] = mascarar(resto[k]);
-    return { pessoaId, ...resto };
+    const saida = { pessoaId };
+    for (const k of campos) if (k in item) saida[k] = mascarar(item[k], idPorRef);
+    return saida;
   };
   return {
     geradoEm: b.geradoEm || referencia.toISOString(),
     commit,
     pessoas,
-    vinculos: b.vinculos.map(converter),
-    pendencias: (b.pendencias || []).map(converter),
+    vinculos: b.vinculos.map(converter(CAMPOS_VINCULO)),
+    pendencias: (b.pendencias || []).map(converter(CAMPOS_PENDENCIA)),
     equivalenciaEmpresas: b.equivalenciaEmpresas || {},
   };
 }
@@ -94,8 +103,16 @@ export function extrairPilotoGolden(html) {
   return saida;
 }
 
-/** 11 dígitos soltos. Os limites alfanuméricos evitam falso positivo dentro de hashes hexadecimais (cpfHash tem 64 caracteres). */
-export const SEQ_CPF = /(?<![0-9A-Za-z])\d{11}(?![0-9A-Za-z])/;
+/** Há sequência de 11 dígitos? São retirados antes da busca os identificadores públicos legítimos, que contêm runs de dígitos por acaso:
+ *  tokens de 64 hexadecimais (cpfHash), "id"/"pessoaId" de 12 hexadecimais e o marcador "[pessoa <id>]".
+ *  Um CPF de 11 dígitos nunca casa com essas exceções. Dígitos colados a letras (ex.: "CPF12345678901x") continuam sendo pegos. */
+export function temSequenciaCpf(texto) {
+  const limpo = texto
+    .replace(/[0-9a-fA-F]{64}/g, '')
+    .replace(/("(?:id|pessoaId)"\s*:\s*")[0-9a-f]{12}"/g, '$1"')
+    .replace(/\[pessoa [0-9a-f]{12}\]/g, '[pessoa]');
+  return /\d{11}/.test(limpo);
+}
 
 /** Varre dist/ atrás de CPF (11 dígitos ou formatado) e da chave "nascimento". Devolve a lista de achados. */
 export function varrerVazamento(dir) {
@@ -105,7 +122,7 @@ export function varrerVazamento(dir) {
       const f = path.join(d, e.name);
       if (e.isDirectory()) { andar(f); continue; }
       const t = fs.readFileSync(f, 'utf8');
-      if (SEQ_CPF.test(t)) achados.push([f, 'sequência de 11 dígitos']);
+      if (temSequenciaCpf(t)) achados.push([f, 'sequência de 11 dígitos']);
       for (const c of t.matchAll(/\d{3}\.\d{3}\.\d{3}-\d{2}/g)) {
         if (c[0] !== '000.000.000-00') { achados.push([f, 'CPF formatado']); break; }
       }

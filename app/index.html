@@ -1879,6 +1879,9 @@ function visaoCompat(base, piloto){
       externo:false, situacao:g?g.situacao:'Ativo', funcao:g?(g.funcao||v.cargo):v.cargo, faixaEtaria:pe.faixaEtaria };
   });
 }
+/* Os blocos que leem o banco e dependem de PESSOAS esperam o boot: sem isso, a leitura do banco que chega antes do fetch
+   roda sobre PESSOAS vazio e o persistir() seguinte sobrescreve a configuração salva com os padrões do piloto. */
+function aposBoot(fn){ if(S.pronto) fn(); else document.addEventListener('lgh-boot-pronto', fn, {once:true}); }
 async function boot(){
   const r = await fetch('data/base.json');
   S.base = await r.json();
@@ -1889,8 +1892,10 @@ async function boot(){
   PESSOAS = visaoCompat(S.base, piloto);
   recalcularDerivados();
   montarNav(); renderLogin(); irPara('login');
+  S.pronto = true;
+  document.dispatchEvent(new CustomEvent('lgh-boot-pronto'));
 }
-boot().catch(e=>{ console.error('Falha no boot:', e); const m=document.querySelector('main'); if(m) m.insertAdjacentHTML('afterbegin','<p class="perigo">Não foi possível carregar a base (data/base.json). '+esc(String(e&&e.message||e))+'</p>'); });
+boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no boot:', e); const m=document.querySelector('main'); if(m) m.insertAdjacentHTML('afterbegin','<p class="perigo">Não foi possível carregar a base (data/base.json). '+esc(String(e&&e.message||e))+'</p>'); });
 </script>
 <!-- ===== BLOCO AV2 (v27, 03/11/2026): historico por colaborador, filtro por status e visao por ciclo no Painel do avaliador.
      Bloco independente: remover este <style>, este <aside> e este <script> devolve o painel ao comportamento da v26. ===== -->
@@ -2219,8 +2224,8 @@ boot().catch(e=>{ console.error('Falha no boot:', e); const m=document.querySele
       const f = {form:renderForm, matriz:renderMatriz, usuarios:renderUsuarios, avaliador:renderAvaliador}[S.tela]; if(f && S.perfil) f();
     }catch(e){ console.warn('lid: falha ao ler', e); }
   }
-  document.addEventListener('lgh-db-pronto', carregar);
-  if(window.LGH_DB) carregar();
+  document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar));
+  if(window.LGH_DB) aposBoot(carregar);
 
   /* ---- 1. formulário automático ---- */
   const renderFormOriginal = renderForm;
@@ -2503,7 +2508,7 @@ boot().catch(e=>{ console.error('Falha no boot:', e); const m=document.querySele
         if(S.tela==='formularios') renderFormularios(); else if(S.tela==='form' && S.perfil) renderForm(); }
     }catch(e){ console.warn('form: falha ao ler', e); }
   }
-  document.addEventListener('lgh-db-pronto', carregar); if(window.LGH_DB) carregar();
+  document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar)); if(window.LGH_DB) aposBoot(carregar);
 })();
 </script>
 <!-- ===== BLOCO FIX (v33, 03/11/2026): colaborador fixo no Formulário, escolha explícita ao entrar pela aba, guarda de saída com avaliação incompleta.
@@ -2649,7 +2654,7 @@ boot().catch(e=>{ console.error('Falha no boot:', e); const m=document.querySele
       montarNav(); if(S.tela==='indicacoes') renderIndicacoes();
     }catch(e){ console.warn('ind: falha ao ler', e); }
   }
-  document.addEventListener('lgh-db-pronto', carregar); if(window.LGH_DB) carregar();
+  document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar)); if(window.LGH_DB) aposBoot(carregar);
 
   /* ---- quem vê o quê ---- */
   function destinatarios(ind){

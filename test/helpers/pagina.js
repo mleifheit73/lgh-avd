@@ -9,20 +9,24 @@ export function lerFixture(nome) {
 
 /**
  * Monta app/index.html no jsdom com fetch simulado (data/base.json e data/piloto-golden.json)
- * e espera o boot terminar (S.pessoas preenchido).
+ * e espera o boot terminar (S.pronto === true). Rejeita se o boot falhar (S.erroBoot) ou passar de 5s.
+ * claudeStub (opcional) substitui window.claude, por exemplo para simular o banco do artefato.
  */
-export async function carregarPagina(baseJson, piloto = {}) {
+export async function carregarPagina(baseJson, piloto = {}, claudeStub = null) {
   const html = fs.readFileSync(raiz + 'app/index.html', 'utf8');
   const erros = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', (e) => erros.push(e));
+  virtualConsole.on('error', (...a) => erros.push(a.map(String).join(' ')));
+  virtualConsole.on('warn', (...a) => erros.push(a.map(String).join(' ')));
   const dom = new JSDOM(html, {
     url: 'http://localhost/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     virtualConsole,
     beforeParse(window) {
-      window.claude = { use: async () => null };
+      if (claudeStub) claudeStub.janela = window; // o stub pode consultar o estado da página (ex.: S.pronto)
+      window.claude = claudeStub || { use: async () => null };
       window.scrollTo = () => {};
       window.fetch = async (url) => {
         const u = String(url);
@@ -34,9 +38,10 @@ export async function carregarPagina(baseJson, piloto = {}) {
   });
   const { window } = dom;
   const limite = Date.now() + 5000;
-  while (!(window.S && window.S.pessoas)) {
+  while (!(window.S && (window.S.pronto === true || window.S.erroBoot))) {
     if (Date.now() > limite) throw new Error('boot não terminou em 5s. Erros: ' + erros.map(String).join(' | '));
     await new Promise((r) => setTimeout(r, 10));
   }
+  if (window.S.erroBoot) throw new Error('falha no boot: ' + window.S.erroBoot);
   return { window, document: window.document, S: window.S, erros };
 }

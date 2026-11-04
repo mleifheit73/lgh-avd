@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Nenhum CPF, RG ou data de nascimento** em `app/`, em `dist/`, no HTML publicado ou em fixture. CPF só existe como hash SHA-256 com sal, como a versão 26 já faz. Teste de varredura obrigatório antes de cada publicação (aceite 13).
-- `app/data/base.json` é **gerado** de `out/base.json` e **gitignored**, como `data/`. Contém nome, cargo, unidade, regime, pendências, faixa etária (derivada no build, nunca a data) e hash. Nomes reais são dado pessoal: ficam fora do git e dentro do artefato privado, que é o que Marcelo autorizou em outubro.
+- `app/data/base.json` é **gerado** de `out/base.json` e **gitignored**, como `data/`. Contém nome, cargo, unidade, regime, pendências, faixa etária (derivada no build, nunca a data) e hash. A regra do projeto proíbe CPF, RG e nascimento no git; nomes, cargo, idade e admissão do piloto já estão no repositório privado (`prototipo/index.html`) e ficam. `app/data/` fica fora do git por ser gerado, não por sigilo.
 - A versão 26 exibe CPF mascarado e data de nascimento no array `PESSOAS`. Isso contraria a regra do projeto e **sai** na Tarefa 1: a página nova não tem esses campos em lugar nenhum. O gráfico de idade do Painel do RH passa a usar `faixaEtaria`.
 - **Inferência é rotulada.** Toda atuação cujo superior não foi definido por pessoa recebe `origem: 'inferido_por_cargo' | 'inferido_por_empresa'`, e toda tela que a mostra exibe o rótulo. Vínculo definido pelo RH recebe `origem: 'definido'` com autor e data.
 - **Fonte única e delta.** `base.json` é a origem dos dados. O banco do artefato guarda apenas as alterações do RH (`delta`), por organização. A página aplica `base + delta` ao carregar. Nunca gravar a base inteira no banco, nunca cravar dado no HTML.

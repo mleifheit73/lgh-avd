@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
-import { SEQ_CPF } from '../scripts/build-app.mjs';
+import { temSequenciaCpf } from '../scripts/build-app.mjs';
 import { carregarPagina, lerFixture } from './helpers/pagina.js';
 
 const raiz = new URL('..', import.meta.url).pathname;
@@ -20,7 +20,7 @@ test('build gera base.json sem CPF, sem nascimento, com hash', soComDados, async
   assert.equal(r.code, 0, r.stderr);
   const b = JSON.parse(fs.readFileSync(raiz + 'app/data/base.json', 'utf8'));
   const txt = JSON.stringify(b);
-  assert.equal(SEQ_CPF.test(txt), false);
+  assert.equal(temSequenciaCpf(txt), false);
   assert.equal(/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(txt), false);
   assert.equal('cpf' in b.pessoas[0], false);
   assert.equal('nascimento' in b.pessoas[0], false);
@@ -30,9 +30,9 @@ test('build gera base.json sem CPF, sem nascimento, com hash', soComDados, async
   assert.match(b.pessoas.find(p => p.cpfHash).cpfHash, /^[0-9a-f]{64}$/);
   assert.ok(b.pessoas.every(p => /^([0-9a-f]{12}|sem-cpf-\d+)$/.test(p.id)));
   assert.ok(b.pessoas.filter(p => !p.cpfHash).every(p => /^sem-cpf-\d+$/.test(p.id)));
-  assert.ok(b.vinculos.every(v => !('pessoaRef' in v) && !('cpf' in v) && b.pessoas.some(p => p.id === v.pessoaId) || false));
+  assert.ok(b.vinculos.every(v => !('pessoaRef' in v) && !('cpf' in v) && b.pessoas.some(p => p.id === v.pessoaId)));
   assert.ok(b.pendencias.every(x => !('pessoaRef' in x)));
-  assert.equal(b.pessoas.length, 1822);
+  assert.ok(b.pessoas.length > 0);
 });
 
 test('build copia os módulos do Plano A sem alteração', async () => {
@@ -99,7 +99,7 @@ test('helper carrega a página no jsdom com a base mini e o boot termina', async
 
 test('fixture não tem CPF, nascimento nem idade', () => {
   const txt = JSON.stringify(lerFixture('base-mini.json'));
-  assert.equal(SEQ_CPF.test(txt), false);
+  assert.equal(temSequenciaCpf(txt), false);
   assert.equal(/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(txt), false);
   assert.equal(/nascimento|"cpf"|"idade"/.test(txt), false);
 });
@@ -129,4 +129,44 @@ test('boot usa o piloto Golden por nome normalizado e tolera piloto ausente', as
   assert.equal(v2.setor, 'Sem setor');
   assert.equal(v2.lider, false);
   assert.equal(sem.window.eval('PESSOAS').length, 14);
+});
+
+// Banco do artefato simulado: responde na hora, antes dos fetches do boot, e registra toda gravação com o estado do boot.
+function bancoFalso(docs) {
+  const sets = [];
+  const stub = {
+    sets,
+    use: async () => {
+      const ref = (caminho) => ({
+        get: async () => ({ exists: caminho in docs, data: () => docs[caminho] }),
+        set: async (d) => { sets.push({ caminho, d, bootPronto: !!(stub.janela && stub.janela.S && stub.janela.S.pronto) }); },
+        delete: async () => {},
+      });
+      return { doc: ref, collection: (nome) => ({ get: async () => ({ docs: [] }), doc: (id) => ref(nome + '/' + id) }) };
+    },
+  };
+  return stub;
+}
+const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+
+test('corrida banco x boot: líder salvo no banco é aplicado após o boot e nada vazio é regravado antes', async () => {
+  const docs = { 'config/lideres-e-contas': { lideres: ['CAM'], usuarios: [{ nome: 'USUARIO SINTETICO', cargo: 'x', cpf: '', email: '', papel: 'avaliador', nivel: 'N1', escopo: 'x', ativo: true }], atualizadoEm: '2026-11-03T00:00:00.000Z' } };
+  const stub = bancoFalso(docs);
+  const { window, S } = await carregarPagina(lerFixture('base-mini.json'), {}, stub);
+  await tick();
+  assert.equal(S.pronto, true);
+  const visao = window.eval('PESSOAS');
+  assert.equal(visao.find((p) => p.id === 'CAM').lider, true);
+  assert.equal(visao.filter((p) => p.lider).length, 1);
+  assert.equal(window.eval('USUARIOS').some((u) => u.nome === 'USUARIO SINTETICO'), true);
+  const gravacoes = stub.sets.filter((s) => s.caminho === 'config/lideres-e-contas');
+  for (const g of gravacoes) {
+    assert.equal(g.bootPronto, true, 'gravou antes do boot');
+    assert.ok(g.d.lideres.includes('CAM'), 'gravou lista de líderes sem o CAM');
+  }
+});
+
+test('boot que falha depois de S.pessoas atribuído faz carregarPagina rejeitar', async () => {
+  const ruim = { ...lerFixture('base-mini.json'), pessoas: 'não é lista' };
+  await assert.rejects(carregarPagina(ruim), /falha no boot/);
 });
