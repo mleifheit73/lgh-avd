@@ -8,3 +8,4 @@ export * from './modelo/atuacao.js';
 export * from './modelo/nome.js';
 export * from './carga/normalizar.js';
 export * from './adaptador.js';
+export * from './arvore-ui.js';
