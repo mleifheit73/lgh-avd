@@ -3,7 +3,7 @@
  * Toda atuação carrega `origem`: o que a carga trouxe fica separado do que foi inferido, e nada inferido vale até o RH confirmar.
  * Puro: não toca tela nem disco.
  */
-import { criarAtuacao } from './atuacao.js';
+import { criarAtuacao, validarArvore } from './atuacao.js';
 import { chaveEmpresa } from '../carga/normalizar.js';
 import { inferirOrganizacao, EQUIVALENCIAS } from './organizacao.js';
 import { normalizarNome } from './nome.js';
@@ -31,6 +31,8 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
   const aviso = (codigo, mensagem, detalhe = {}) => log.push({ codigo, mensagem, ...detalhe });
   const pessoas = new Map(base.pessoas.map(p => [p.id, p]));
 
+  if (!equivalencias || equivalencias.length === 0) aviso('tabela_equivalencia_indisponivel', 'Tabela de equivalência de organizações vazia ou não carregada: PJ que dependem dela ficam sem organização');
+
   const orgDaFilial = new Map();
   for (const o of organizacoes) for (const f of o.filiais ?? []) orgDaFilial.set(chaveEmpresa(f), o.id);
 
@@ -53,6 +55,8 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
   const pjSemOrg = new Map();     // pessoaId -> [{ empresa, cargo }]
   for (const v of base.vinculos) {
     let orgId; let origem; let metodo = null;
+    if (!pessoas.has(v.pessoaId)) { aviso('pessoa_inexistente', `Vínculo aponta para pessoa ${v.pessoaId}, que não está na base`, { pessoaId: v.pessoaId }); continue; }
+    if (v.regime !== 'CLT' && v.regime !== 'PJ') aviso('regime_desconhecido', `Vínculo de ${v.pessoaId} com regime "${v.regime}": tratado como PJ`, { pessoaId: v.pessoaId, regime: v.regime });
     if (v.regime === 'CLT') {
       orgId = orgDaFilial.get(chaveEmpresa(v.filial));
       origem = 'carga';
@@ -177,9 +181,21 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
   const comAtuacao = new Set(atuacoes.map(a => a.pessoaRef));
   const semOrganizacao = [];
   for (const [pessoaId, vinculosPJ] of pjSemOrg) {
-    if (comAtuacao.has(pessoaId)) continue;
+    if (comAtuacao.has(pessoaId)) {
+      for (const j of vinculosPJ) aviso('vinculo_pj_sem_organizacao_ignorado', `PJ de ${pessoaId} na empresa ${j.empresa} sem organização: ignorado porque a pessoa já tem atuação`, { pessoaId, empresa: j.empresa, cargo: j.cargo });
+      continue;
+    }
     const pessoa = pessoas.get(pessoaId);
     if (pessoa) semOrganizacao.push({ ...pessoa, vinculosPJ });
+  }
+  const comVinculo = new Set(base.vinculos.map(v => v.pessoaId));
+  for (const p of base.pessoas) if (!comVinculo.has(p.id)) aviso('pessoa_sem_vinculo', `Pessoa ${p.id} não tem nenhum vínculo na base`, { pessoaId: p.id });
+
+  // 6. Visibilidade: valida a árvore de cada organização sem desfazer nada. O RH corrige na montagem.
+  for (const o of organizacoes) {
+    try { validarArvore(atuacoes, o.id); } catch (e) {
+      aviso('arvore_invalida_na_carga', e.message, { organizacaoId: o.id, erro: e.codigo || e.code });
+    }
   }
   return { atuacoes, semOrganizacao, log };
 }

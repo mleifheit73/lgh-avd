@@ -175,6 +175,12 @@ test('base real: PJ inferidos, pool sem organização, raiz do Golden', { skip: 
   console.log(`# atuações no Golden: ${golden.length}; raízes: ${raizesGolden.map(a => a.pessoaRef + ' ' + a.funcao).join(', ')}; log por código: ${JSON.stringify(porCodigo)}`);
   const semPiloto = atuacoesIniciais(baseReal, orgs, {});
   assert.equal(semPiloto.semOrganizacao.length - (porCodigo.atuacao_criada_pelo_piloto ?? 0), semOrganizacao.length, 'o pool diminui exatamente pelas atuações criadas pelo piloto');
+  const invalidas = log.filter(l => l.codigo === 'arvore_invalida_na_carga');
+  const outros = invalidas.filter(l => l.erro !== 'sem_raiz');
+  console.log(`# arvore_invalida_na_carga: ${invalidas.length} (sem_raiz: ${invalidas.length - outros.length}; outros códigos: ${JSON.stringify(outros.map(l => [l.organizacaoId, l.erro]))})`);
+  validarArvore(atuacoes, 'HOTEL LAGHETTO GOLDEN');
+  assert.ok(!invalidas.some(l => l.organizacaoId === 'HOTEL LAGHETTO GOLDEN'));
+  assert.deepEqual(outros, [], 'toda árvore inválida fora a do Golden é só sem_raiz');
   assert.ok(inferidas.length >= 100);
   assert.ok(semOrganizacao.length >= 100 && semOrganizacao.length <= 140);
   assert.equal(raizesGolden.length, 1);
@@ -185,4 +191,37 @@ test('base real: PJ inferidos, pool sem organização, raiz do Golden', { skip: 
     assert.ok(log.some(l => l.codigo === 'multiplas_raizes_candidatas' && l.organizacaoId === 'HOTEL LAGHETTO GOLDEN'));
   }
   assert.equal(new Set(atuacoes.map(a => a.id)).size, atuacoes.length, 'ids únicos');
+});
+
+test('atuacoesIniciais: ciclo vindo do piloto é logado como arvore_invalida_na_carga, sem desfazer nada', () => {
+  const p = pilotoMini();
+  p['SUPERVISOR DE GOVERNANCA TESTE'] = { ...p['SUPERVISOR DE GOVERNANCA TESTE'], avaliadores: ['CAMAREIRA TESTE'] };   // CAM avalia SUP e SUP avalia CAM
+  const { atuacoes, log } = iniciais(p);
+  const l = log.find(x => x.codigo === 'arvore_invalida_na_carga' && x.organizacaoId === 'GOLDEN');
+  assert.equal(l.erro, 'ciclo');
+  assert.equal(atuacoes.find(a => a.pessoaRef === 'CAM').superiorId, 'GOLDEN|SUP|1', 'nada é desfeito');
+  assert.ok(!log.some(x => x.codigo === 'arvore_invalida_na_carga' && x.organizacaoId === 'LAGHETTO CORPORATIVO' && x.erro !== 'sem_raiz'));
+});
+test('atuacoesIniciais: exclusões silenciosas viram log (PJ ignorado, pessoa sem vínculo, pessoa inexistente)', () => {
+  const b = base();
+  b.pessoas.push({ id: 'ORFA', nome: 'PESSOA SEM VINCULO TESTE', status: 'ativo', motivoStatus: null, cpfHash: null, faixaEtaria: null, nomesAlternativos: [] });
+  b.vinculos.push({ pessoaId: 'FANTASMA', regime: 'CLT', empresa: 'BRANO', empresaOriginal: 'BRANO', cargo: 'X', inicio: '2022-01-01', filial: 'BRANO', codigo: '1', chave: 'BRANO|1' });
+  b.vinculos.push({ pessoaId: 'CAM', regime: 'PJ', empresa: 'EMPRESA SEM FILIAL', empresaOriginal: 'EMPRESA SEM FILIAL LTDA', cargo: 'CONSULTOR', inicio: '2026-01-10' });
+  const { log } = atuacoesIniciais(b, organizacoesDe(b, FUSAO_MINI), {}, { organizacaoPiloto: 'GOLDEN' });
+  assert.ok(log.some(l => l.codigo === 'vinculo_pj_sem_organizacao_ignorado' && l.pessoaId === 'CAM' && l.empresa === 'EMPRESA SEM FILIAL'));
+  assert.ok(log.some(l => l.codigo === 'pessoa_sem_vinculo' && l.pessoaId === 'ORFA'));
+  assert.ok(log.some(l => l.codigo === 'pessoa_inexistente' && l.pessoaId === 'FANTASMA'));
+});
+test('atuacoesIniciais: regime desconhecido é logado e tratado como PJ', () => {
+  const b = base();
+  b.vinculos.push({ pessoaId: 'GAR1', regime: 'ESTAGIO', empresa: 'BRANO', empresaOriginal: 'BRANO', cargo: 'ESTAGIARIO', inicio: '2026-01-10' });
+  const { atuacoes, log } = atuacoesIniciais(b, organizacoesDe(b, FUSAO_MINI), {}, { organizacaoPiloto: 'GOLDEN' });
+  assert.ok(log.some(l => l.codigo === 'regime_desconhecido' && l.regime === 'ESTAGIO'));
+  const a = atuacoes.find(x => x.pessoaRef === 'GAR1' && x.organizacaoId === 'BRANO');
+  assert.equal(a.origem, 'inferido_por_empresa');
+});
+test('atuacoesIniciais: tabela de equivalência vazia é logada uma vez', () => {
+  const { log } = atuacoesIniciais(base(), organizacoesDe(base(), FUSAO_MINI), {}, { equivalencias: [], organizacaoPiloto: 'GOLDEN' });
+  assert.equal(log.filter(l => l.codigo === 'tabela_equivalencia_indisponivel').length, 1);
+  assert.equal(iniciais().log.filter(l => l.codigo === 'tabela_equivalencia_indisponivel').length, 0);
 });
