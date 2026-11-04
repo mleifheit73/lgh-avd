@@ -3321,6 +3321,348 @@ Regras:
   window.LGH_ARVORE = { render: renderArvoreTela };
 })();
 </script>
+<style id="bloco-montagem-css">
+/* Painel de montagem (Tarefa 5): à direita da árvore a partir de 1100px, abaixo dela em tela estreita. */
+#t-arvore .ar-area{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);align-items:start}
+#t-arvore .ar-principal{min-width:0}
+@media (min-width:1100px){
+  #t-arvore .ar-area{grid-template-columns:minmax(0,1fr) 384px}
+  /* abaixo da barra do topo (49px) e da navegação de abas */
+  #ar-painel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 108px);max-height:calc(100vh - 120px);overflow:auto}
+}
+#ar-painel{display:grid;gap:14px;padding:16px;align-content:start}
+#ar-painel h2,#ar-painel h3{margin:0}
+#ar-painel .mp-vazio{color:var(--muted);font-size:.88rem;margin:0}
+#ar-painel .mp-lider{display:grid;gap:4px;padding-left:12px;border-left:3px solid var(--accent)}
+#ar-painel .mp-lider.mp-sem-marca{border-left-color:var(--line)}
+#ar-painel .mp-nome{font-family:var(--f-disp);font-size:1.12rem;font-weight:600;line-height:1.25}
+#ar-painel .mp-funcao{font-size:.84rem;color:var(--muted)}
+#ar-painel .mp-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+#ar-painel .mp-acoes{display:flex;flex-wrap:wrap;gap:8px}
+#ar-painel .mp-acoes .btn{padding:6px 11px;font-size:.8rem}
+#ar-painel .mp-leitura{font-size:.8rem;color:var(--muted);background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:0}
+#ar-painel .mp-secao{display:grid;gap:8px}
+#ar-painel .mp-secao>h3{font-size:.92rem;display:flex;align-items:baseline;gap:8px}
+#ar-painel .mp-secao>h3 .num{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);font-weight:500}
+#ar-painel .mp-lista{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+#ar-painel .mp-lista>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--line)}
+#ar-painel .mp-pessoa{display:grid;gap:1px;min-width:0}
+#ar-painel .mp-pessoa b{font-weight:600;font-size:.86rem;overflow-wrap:anywhere}
+#ar-painel .mp-pessoa span{font-size:.76rem;color:var(--muted);overflow-wrap:anywhere}
+#ar-painel .mp-linha-acoes{display:flex;gap:10px;align-items:center}
+#ar-painel .mp-linha-acoes .tag{font-size:.68rem}
+#ar-painel .mp-remover{color:var(--crit)}
+#ar-pool{display:grid;gap:8px}
+#ar-pool[hidden]{display:none}
+#ar-pool .mp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#ar-pool .mp-filtros input{grid-column:1 / -1}
+#ar-pool .mp-filtros input,#ar-pool .mp-filtros select{width:100%;min-width:0;font-size:.84rem;padding:6px 8px}
+#ar-pool .mp-resumo{font-size:.8rem;color:var(--muted);margin:0}
+#ar-pool .mp-marcar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+#ar-pool .mp-lista{max-height:340px;overflow:auto}
+#ar-pool .mp-lista>li{grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer}
+#ar-pool .mp-lista>li:hover{background:var(--surface-2)}
+#ar-pool .mp-lista>li.mp-marcado{background:var(--accent-soft)}
+#ar-pool .mp-adicionar{position:sticky;bottom:0;background:var(--surface);padding-top:6px;display:grid;gap:6px}
+#ar-pool .mp-adicionar .btn{width:100%}
+#ar-pool .mp-motivo{font-size:.78rem;color:var(--muted);margin:0}
+#ar-painel-msg{font-size:.84rem;margin:0}
+#ar-painel-msg:empty{display:none}
+#ar-painel-msg.ok{color:var(--accent-ink)}
+#ar-painel-msg.erro{color:var(--crit)}
+#ar-painel .mp-desfazer{display:flex;gap:8px;align-items:center;font-size:.78rem;color:var(--muted)}
+#ar-painel .mp-desfazer .btn{padding:5px 10px;font-size:.78rem;flex:none}
+@media (max-width:640px){#ar-pool .mp-filtros{grid-template-columns:1fr}
+  #ar-painel .mp-secao .mp-lista>li{grid-template-columns:1fr}#ar-painel .mp-secao .mp-linha-acoes{justify-content:flex-start}}
+</style>
+<script id="bloco-montagem">
+(function(){
+  if(typeof TELAS === 'undefined' || typeof LGH === 'undefined' || !LGH.montagem || !window.LGH_ARVORE) return;
+  const M = LGH.montagem, CORP = LGH.ID_CORPORATIVO;
+  const sec = document.querySelector('#t-arvore');
+  if(!sec) return;
+
+  /* ---- permissões novas (D20): estrutura corporativa e raiz da unidade são só da holding ---- */
+  for(const r of [{k:'editarCorporativo', n:'Editar estrutura corporativa', p:['admin']},
+                  {k:'definirRaiz', n:'Definir raiz da unidade', p:['admin']}])
+    if(!RECURSOS.some(x=>x.k===r.k)) RECURSOS.push(r);
+  const editavel = org => org === CORP ? pode('editarCorporativo') : pode('definirAvaliador');
+
+  /* ---- layout: árvore e painel lado a lado; o #ar-pool da Tarefa 4 passa a morar no painel ---- */
+  const semLider = sec.querySelector('#ar-sem-lider');
+  const cartaoArvore = sec.querySelector('#ar-arvore').closest('.card');
+  const area = document.createElement('div'); area.className = 'ar-area';
+  const principal = document.createElement('div'); principal.className = 'ar-principal';
+  const painel = document.createElement('aside'); painel.id = 'ar-painel'; painel.className = 'card';
+  painel.setAttribute('aria-label', 'Montagem da equipe');
+  semLider.before(area);
+  principal.append(semLider, cartaoArvore);
+  const corpo = document.createElement('div'); corpo.className = 'mp-corpo'; corpo.style.display = 'contents';
+  const pool = sec.querySelector('#ar-pool');
+  const msg = document.createElement('p'); msg.id = 'ar-painel-msg'; msg.setAttribute('role', 'status'); msg.setAttribute('aria-live', 'polite');
+  painel.append(corpo, pool, msg);
+  area.append(principal, painel);
+
+  /* ---- estado do painel (só da tela, não é dado) ---- */
+  const P = { marcados: new Set(), filtro: {texto:'', cargo:'', setor:''}, selecao: null, org: null };
+  const nomePessoa = pid => LGH.nomeExibicao(S, S.pessoasPorId && S.pessoasPorId.get(pid)) || pid;
+  const atuacao = id => (S.atuacoes||[]).find(a=>a.id===id && a.situacao==='ativa' && a.fim==null) || null;
+  const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
+  const origemTag = origem => {
+    if(origem === 'sem_organizacao') return `<span class="tag t-pend" title="PJ da carga sem filial correspondente">Sem organização</span>`;
+    const l = LGH.LEGENDA_ORIGEM.find(x=>x.origem===origem);
+    return l ? `<span class="tag ${l.classe}" title="${esc(l.texto)}">${esc(l.curto)}</span>`
+             : `<span class="tag t-pend" title="Origem não registrada">Sem registro</span>`;
+  };
+  const inferido = a => !!a && a.superiorId != null && /^inferido_/.test(a.origem || '');
+
+  /* ---- mensagens a partir do código (sem reinterpretar o adaptador) ---- */
+  function texto(codigo, ctx = {}){
+    const n = ctx.nome || 'esta pessoa';
+    return ({
+      proprio_superior: 'A pessoa selecionada na árvore não pode entrar na própria equipe.',
+      avaliacao_mutua: 'Recusado: essas duas pessoas passariam a se avaliar mutuamente.',
+      ciclo: 'Recusado: a mudança criaria um ciclo na hierarquia.',
+      superior_sem_marca_de_lider: `${n} não está marcado como líder. Marque como líder antes de montar a equipe.`,
+      raiz_com_superior: ctx.raiz ? `${n} tem líder e por isso não pode ser raiz. Remova o líder antes.`
+        : 'A raiz da organização não entra em equipe: ela é avaliada pela estrutura corporativa.',
+      sem_permissao: 'Seu perfil não pode alterar esta estrutura.',
+      lider_com_equipe: `${n} tem equipe. Remova as pessoas da equipe antes de desmarcar a marca de líder.`,
+      autoavaliacao: 'Ninguém avalia a si mesmo.',
+      superior_fora_da_organizacao: 'O líder escolhido é de outra organização.',
+      nao_inferido: 'Este vínculo já foi definido pelo RH.',
+      sem_superior: 'Esta atuação não tem líder para confirmar.',
+      fora_do_pool: 'A pessoa já não está no conjunto sem líder.',
+      atuacao_inexistente: 'A atuação não existe mais (foi desfeita ou encerrada).',
+      multiplas_raizes: 'Recusado: a organização ficaria com mais de uma raiz.',
+      sem_raiz: 'Recusado: a organização ficaria sem raiz.',
+    })[codigo] || `Não foi possível concluir (código ${codigo}).`;
+  }
+  function avisar(t, tipo){ msg.textContent = t || ''; msg.className = tipo || ''; }
+
+  /* ---- itens do pool: na unidade, atuações sem líder; na Rede, PJ sem organização, gerentes gerais e soltos ---- */
+  function itensPool(org, filtro){
+    if(org === CORP) return M.poolRede(S, filtro);
+    return M.pool(S, org, filtro).map(a=>({chave:a.id, tipo:'atuacao', pessoaId:a.pessoaRef, atuacaoId:a.id, nome:nomePessoa(a.pessoaRef),
+      funcao:a.funcao, setor:a.setor, origem:a.origem}));
+  }
+  function opcoesFiltro(org){
+    const todos = itensPool(org, {});
+    const cargos = new Set(), setores = new Set();
+    for(const i of todos){
+      if(i.funcao) cargos.add(i.funcao);
+      const a = i.atuacaoId && atuacao(i.atuacaoId);
+      if(a && org !== CORP){ const c = M.cargoDaAtuacao(S, a); if(c) cargos.add(c); }
+      setores.add(i.setor || LGH.SEM_SETOR);
+    }
+    const ord = s => [...s].sort((x,y)=>x.localeCompare(y,'pt-BR'));
+    return {cargos: ord(cargos), setores: ord(setores)};
+  }
+
+  /* ---- render ---- */
+  function selecionada(){
+    const a = S.arSelecionada ? atuacao(S.arSelecionada) : null;
+    return a && a.organizacaoId === S.organizacaoSelecionada ? a : null;
+  }
+  function render(){
+    if(S.tela !== 'arvore') return;
+    const org = S.organizacaoSelecionada;
+    const a = selecionada();
+    if(P.org !== org || P.selecao !== (a && a.id)){ P.marcados.clear(); P.org = org; P.selecao = a && a.id; }
+    const pode_ = !!org && editavel(org);
+    const rede = org === CORP && pode('verRede');
+    if(!a){
+      corpo.innerHTML = `<h2 class="mp-nome">Montar equipe</h2>
+        <p class="mp-vazio">Clique numa caixa da árvore para ver a equipe dessa pessoa${pode_ ? ' e adicionar quem está sem líder' : ''}.</p>`;
+      renderPool(org, null, false, rede);
+      renderDesfazer(pode_);
+      return;
+    }
+    const nome = nomePessoa(a.pessoaRef);
+    const equipe = M.equipeDe(S, a.id);
+    const acoes = [];
+    if(pode_){
+      acoes.push(`<button type="button" class="btn sec" data-acao="lider">${a.podeLiderar ? 'Desmarcar como líder' : 'Marcar como líder'}</button>`);
+      if(inferido(a)) acoes.push(`<button type="button" class="btn sec" data-acao="confirmar-proprio" title="O líder de ${esc(nome)} foi inferido pela carga: confirmar mantém o líder e registra a decisão do RH">Confirmar vínculo inferido</button>`);
+      if(org !== CORP && pode('definirRaiz') && !a.ehRaiz && a.superiorId == null)
+        acoes.push(`<button type="button" class="btn sec" data-acao="raiz" title="A raiz atual deixa de ser raiz e fica sem líder">Marcar como raiz</button>`);
+    }
+    const sup = a.superiorId ? atuacao(a.superiorId) : null;
+    corpo.innerHTML = `<div class="mp-lider${a.podeLiderar ? '' : ' mp-sem-marca'}">
+        <h2 class="mp-nome">${esc(nome)}</h2>
+        <div class="mp-funcao">${esc(a.funcao || 'Sem função')}${sup ? ` · líder: ${esc(nomePessoa(sup.pessoaRef))}` : a.ehRaiz ? ' · raiz da organização' : ' · sem líder'}</div>
+        <div class="mp-tags">${a.ehRaiz ? '<span class="tag t-ok">Raiz</span>' : ''}${origemTag(a.origem)}<span class="tag ${a.podeLiderar ? 't-ok' : 't-pend'}">${a.podeLiderar ? 'Líder' : 'Sem marca de líder'}</span></div>
+      </div>
+      ${acoes.length ? `<div class="mp-acoes">${acoes.join('')}</div>` : ''}
+      ${pode_ ? '' : '<p class="mp-leitura">Somente leitura: seu perfil vê a equipe, mas não altera esta estrutura.</p>'}
+      <section class="mp-secao" aria-label="Equipe de ${esc(nome)}">
+        <h3>Equipe de ${esc(nome)} <span class="num">${equipe.length}</span></h3>
+        ${equipe.length ? `<ul class="mp-lista">${equipe.map(s=>`<li data-equipe-linha="${esc(s.id)}">
+            <div class="mp-pessoa"><b>${esc(nomePessoa(s.pessoaRef))}</b><span>${esc(s.funcao || 'Sem função')}${s.setor ? ` · ${esc(s.setor)}` : ''}</span></div>
+            <div class="mp-linha-acoes">${origemTag(s.origem)}${pode_ && inferido(s) ? `<button type="button" class="linkish" data-acao="confirmar" data-id="${esc(s.id)}" title="Manter o líder e registrar a decisão do RH">Confirmar</button>` : ''}${pode_ ? `<button type="button" class="linkish mp-remover" data-acao="remover" data-id="${esc(s.id)}">Remover</button>` : ''}</div>
+          </li>`).join('')}</ul>` : '<p class="mp-vazio">Ninguém na equipe ainda.</p>'}
+      </section>`;
+    renderPool(org, a, pode_, rede);
+    renderDesfazer(pode_);
+  }
+  function renderPool(org, a, pode_, rede){
+    const resumoRede = () => {
+      const n = LGH.poolSemOrganizacao(S).length;
+      return `<p class="mp-resumo">${n ? `<b>${plural(n,'pessoa','pessoas')} sem organização</b> (PJ sem filial correspondente), para o RH distribuir.` : 'Nenhuma pessoa sem organização: todo PJ da carga já tem atuação.'}</p>`;
+    };
+    if(!org || !a || !pode_){
+      pool.hidden = !rede;
+      pool.innerHTML = rede ? resumoRede() : '';
+      return;
+    }
+    const nome = nomePessoa(a.pessoaRef);
+    const {cargos, setores} = opcoesFiltro(org);
+    if(P.filtro.cargo && !cargos.includes(P.filtro.cargo)) P.filtro.cargo = '';
+    if(P.filtro.setor && !setores.includes(P.filtro.setor)) P.filtro.setor = '';
+    const opt = (lista, valor, vazio) => `<option value="">${vazio}</option>` + lista.map(v=>`<option value="${esc(v)}"${v===valor?' selected':''}>${esc(v)}</option>`).join('');
+    pool.hidden = false;
+    pool.innerHTML = `<h3>${rede ? 'Sem ligação ao corporativo' : 'Sem líder nesta organização'}</h3>
+      ${rede ? resumoRede() : ''}
+      <div class="mp-filtros">
+        <input type="text" id="ar-pool-texto" placeholder="Buscar por nome ou função" aria-label="Buscar por nome ou função" value="${esc(P.filtro.texto)}">
+        <select id="ar-pool-cargo" aria-label="Filtrar por cargo">${opt(cargos, P.filtro.cargo, 'Todos os cargos')}</select>
+        <select id="ar-pool-setor" aria-label="Filtrar por setor">${opt(setores, P.filtro.setor, 'Todos os setores')}</select>
+      </div>
+      <div class="mp-marcar"><span id="ar-pool-contagem"></span><button type="button" class="linkish" id="ar-pool-todos">Selecionar todos os filtrados</button></div>
+      <ul class="mp-lista" id="ar-pool-lista"></ul>
+      <div class="mp-adicionar">
+        ${a.podeLiderar ? '' : `<p class="mp-motivo">${esc(nome)} não está marcado como líder. Marque como líder para montar a equipe.</p>`}
+        <button type="button" class="btn" id="ar-adicionar" disabled></button>
+      </div>`;
+    pool.dataset.lider = a.id;
+    renderListaPool();
+  }
+  /* só a lista e o botão: digitar no filtro não perde o foco */
+  function filtrados(){
+    const a = selecionada();
+    return itensPool(S.organizacaoSelecionada, P.filtro).filter(i => !a || i.atuacaoId !== a.id);
+  }
+  function renderListaPool(){
+    const lista = pool.querySelector('#ar-pool-lista'); if(!lista) return;
+    const a = selecionada(); if(!a) return;
+    const itens = filtrados();
+    const validos = new Set(itensPool(S.organizacaoSelecionada, {}).map(i=>i.chave));
+    for(const k of [...P.marcados]) if(!validos.has(k)) P.marcados.delete(k);
+    lista.innerHTML = itens.length ? itens.map(i=>{
+      const m = P.marcados.has(i.chave), idc = 'mp-' + i.chave.replace(/[^A-Za-z0-9_-]/g, '_');
+      return `<li class="${m ? 'mp-marcado' : ''}" data-linha-pool="${esc(i.chave)}">
+        <input type="checkbox" class="chk" id="${esc(idc)}" data-pool="${esc(i.chave)}"${m ? ' checked' : ''}>
+        <label class="mp-pessoa" for="${esc(idc)}"><b>${esc(i.nome)}</b><span>${esc(i.funcao || 'Sem função')}${i.setor ? ` · ${esc(i.setor)}` : ''}${i.tipo === 'raiz' ? ` · raiz de ${esc(((S.organizacoes||[]).find(o=>o.id===i.organizacaoId)||{}).nome || i.organizacaoId)}` : ''}</span></label>
+        ${origemTag(i.origem)}</li>`;
+    }).join('') : `<li class="mp-vazio" style="display:block;cursor:default">${P.filtro.texto || P.filtro.cargo || P.filtro.setor ? 'Ninguém com esses filtros.' : 'Ninguém sem líder nesta organização.'}</li>`;
+    pool.querySelector('#ar-pool-contagem').textContent = `${plural(itens.length,'pessoa','pessoas')} ${itens.length===1?'listada':'listadas'}`;
+    renderBotao(a);
+  }
+  function renderBotao(a){
+    const n = P.marcados.size, btn = pool.querySelector('#ar-adicionar');
+    if(!btn) return;
+    btn.textContent = `Adicionar ${n} à equipe de ${nomePessoa(a.pessoaRef)}`;
+    btn.disabled = n === 0 || !a.podeLiderar;
+  }
+  function renderDesfazer(pode_){
+    let d = painel.querySelector('.mp-desfazer');
+    if(!pode_ || !HIST.length){ if(d) d.remove(); return; }
+    if(!d){ d = document.createElement('div'); d.className = 'mp-desfazer'; painel.append(d); }
+    d.innerHTML = `<button type="button" class="btn sec" id="ar-desfazer">Desfazer</button><span>Última alteração: ${esc(HIST[HIST.length-1].desc)}</span>`;
+  }
+
+  /* ---- ações: todas por tentarMudar, então entram no Desfazer; recusa não deixa passo vazio ---- */
+  function redesenhar(){ window.LGH_ARVORE.render(); if(typeof atualizarDesfazer === 'function') atualizarDesfazer(); }
+  function executar(desc, fn, ctx, okMsg){
+    const r = tentarMudar(desc, fn);
+    redesenhar();
+    if(!r.ok){ avisar(texto(r.erro && r.erro.codigo, ctx), 'erro'); return r; }
+    const v = r.valor || {};
+    if(v.recusados && v.recusados.length){
+      const quem = v.recusados.map(x=>{
+        const i = x.id ? atuacao(x.id) : null;
+        const n = i ? nomePessoa(i.pessoaRef) : (x.chave || x.id || '').replace(/^[pra]:/, '');
+        return `${n} (${texto(x.codigo, ctx)})`;
+      });
+      avisar(`${okMsg(v)} Ficaram de fora, sem nenhuma alteração: ${quem.join('; ')}`, 'erro');
+    } else avisar(okMsg(v), 'ok');
+    return r;
+  }
+  function agir(acao, id){
+    const org = S.organizacaoSelecionada, a = selecionada();
+    if(!a) return;
+    const nome = nomePessoa(a.pessoaRef), autor = autorAtual();
+    if(!editavel(org) || (acao === 'raiz' && !pode('definirRaiz'))){ avisar(texto('sem_permissao'), 'erro'); return; }
+    if(acao === 'adicionar'){
+      const chaves = [...P.marcados];
+      if(!chaves.length) return;
+      const fn = org === CORP ? () => M.adicionarNaRede(S, chaves, a.id, autor) : () => M.adicionarEmBloco(S, chaves, a.id, autor);
+      const r = executar(`${plural(chaves.length,'pessoa','pessoas')} na equipe de ${nome}`, fn, {nome},
+        v => `${plural(v.aplicados.length,'pessoa entrou','pessoas entraram')} na equipe de ${nome}.`);
+      if(r.ok){ P.marcados.clear(); renderListaPool(); }
+      return;
+    }
+    if(acao === 'remover'){
+      const s = atuacao(id); const ns = s ? nomePessoa(s.pessoaRef) : '';
+      executar(`${ns} saiu da equipe de ${nome}`, () => M.remover(S, id, autor), {nome: ns}, () => `${ns} saiu da equipe de ${nome} e voltou ao conjunto sem líder.`);
+      return;
+    }
+    if(acao === 'confirmar' || acao === 'confirmar-proprio'){
+      const alvo = acao === 'confirmar' ? id : a.id; const s = atuacao(alvo); const ns = s ? nomePessoa(s.pessoaRef) : '';
+      executar(`vínculo de ${ns} confirmado`, () => M.confirmarInferido(S, alvo, autor), {nome: ns}, () => `Vínculo de ${ns} confirmado pelo RH.`);
+      return;
+    }
+    if(acao === 'lider'){
+      const valor = !a.podeLiderar;
+      executar(`${valor ? 'marcar' : 'desmarcar'} ${nome} como líder`, () => M.marcarLider(S, a.id, valor), {nome},
+        () => valor ? `${nome} agora pode ter equipe.` : `${nome} deixou de ter marca de líder.`);
+      return;
+    }
+    if(acao === 'raiz'){
+      executar(`${nome} como raiz de ${nomeOrganizacao()}`, () => M.marcarRaiz(S, a.id, autor), {nome, raiz:true},
+        v => `${nome} é a raiz de ${nomeOrganizacao()}.${v.anteriores && v.anteriores.length ? ' A raiz anterior ficou sem líder.' : ''}`);
+    }
+  }
+
+  painel.addEventListener('click', e=>{
+    if(!(e.target instanceof Element)) return;
+    const b = e.target.closest('[data-acao]');
+    if(b){ agir(b.dataset.acao, b.dataset.id); return; }
+    if(e.target.closest('#ar-adicionar')){ agir('adicionar'); return; }
+    if(e.target.closest('#ar-desfazer')){ const d = desfazer(); redesenhar(); avisar(d ? `Desfeito: ${d}.` : '', 'ok'); return; }
+    if(e.target.closest('#ar-pool-todos')){ filtrados().forEach(i=>P.marcados.add(i.chave)); renderListaPool(); return; }
+    const li = e.target.closest('[data-linha-pool]');
+    if(li && !e.target.closest('input,label')){ const c = li.querySelector('input[data-pool]'); if(c) c.click(); }
+  });
+  painel.addEventListener('change', e=>{
+    const t = e.target;
+    if(t.matches('input[data-pool]')){   /* sem redesenhar a lista: o foco e as outras caixas ficam onde estão */
+      if(t.checked) P.marcados.add(t.dataset.pool); else P.marcados.delete(t.dataset.pool);
+      const li = t.closest('li'); if(li) li.classList.toggle('mp-marcado', t.checked);
+      const a = selecionada(); if(a) renderBotao(a);
+      return;
+    }
+    if(t.id === 'ar-pool-cargo'){ P.filtro.cargo = t.value; renderListaPool(); }
+    if(t.id === 'ar-pool-setor'){ P.filtro.setor = t.value; renderListaPool(); }
+  });
+  painel.addEventListener('input', e=>{ if(e.target.id === 'ar-pool-texto'){ P.filtro.texto = e.target.value; renderListaPool(); } });
+  document.addEventListener('lgh-arvore-selecionada', e=>{
+    if(e.detail && e.detail.atuacaoId) S.arSelecionada = e.detail.atuacaoId;
+    avisar(''); render();
+  });
+
+  /* ---- o painel acompanha todo redesenho da Árvore ---- */
+  const renderArvoreOriginalMp = window.LGH_ARVORE.render;
+  window.LGH_ARVORE.render = function(){ const r = renderArvoreOriginalMp.apply(this, arguments); render(); return r; };
+  const irParaOriginalMp = irPara;
+  irPara = function(){ const r = irParaOriginalMp.apply(this, arguments); render(); return r; };
+  const desfazerOriginalMp = desfazer;
+  desfazer = function(){ const r = desfazerOriginalMp.apply(this, arguments); if(S.tela === 'arvore') window.LGH_ARVORE.render(); return r; };
+  sec.querySelector('#ar-empresa').addEventListener('change', ()=>render());
+  window.LGH_MONTAGEM = { render };
+})();
+</script>
 
 
 
