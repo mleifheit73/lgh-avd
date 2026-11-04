@@ -168,6 +168,8 @@ test('chave da avaliação separa as duas atuações da mesma pessoa e as duas a
 test('Painel do avaliador: uma linha por atuação; a mesma pessoa duas vezes sob o mesmo avaliador traz "2ª atuação"', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
   // SUP ganha uma segunda atuação (sob DUPLO) e CAM ganha uma segunda atuação sob ela: CAM aparece duas vezes para SUP
+  // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
+  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) window.LGH.marcarLider(S, id, true);
   window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
   const sup2 = window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH').atuacao;
   assert.equal(sup2.id, 'GOLDEN|SUP|2');

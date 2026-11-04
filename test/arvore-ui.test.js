@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom';
 import { lerFixture } from './helpers/pagina.js';
 import { montarEstado } from './helpers/estado.js';
 import { arvore, semSuperior, atuacoesDe } from '../app/js/modelo/atuacao.js';
-import { definirSuperior, rotuloOrigem } from '../app/js/adaptador.js';
+import { definirSuperior, marcarLider, rotuloOrigem } from '../app/js/adaptador.js';
 import {
   renderArvore, resumoOrganizacao, foraDaArvore, ligacoesCorporativas, unidadesSob, ligacaoDaUnidade, poolSemOrganizacao,
   rotuloOrigemCurto, LEGENDA_ORIGEM,
@@ -59,6 +59,7 @@ test('renderArvore: rótulo curto de origem com o texto completo no title; marca
 
 test('renderArvore: raiz e primeiro nível abertos, netos fechados por padrão; profundidadeAberta abre mais', () => {
   const S = estado();
+  marcarLider(S, 'GOLDEN|REC1|1', true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
   assert.equal(definirSuperior(S, 'GOLDEN|COZ1|1', 'GOLDEN|REC1|1', 'RH Teste').ok, true);   // neto: GG > REC1 > COZ1
   const no = arvore(S.atuacoes, 'GOLDEN');
   let doc = parse(renderArvore(no, { profundidadeAberta: 1, pessoas: S.pessoasPorId }));
@@ -131,6 +132,7 @@ test('pool sem organização: só quem a carga deixou sem organização e ainda 
 
 test('pessoa com duas atuações sob dois líderes aparece em duas caixas com o mesmo data-pessoa', () => {
   const S = estado({ pil: pilotoDuplo() });
+  marcarLider(S, 'GOLDEN|GG|1', true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
   assert.equal(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH Teste').ok, true);   // SUP entra na árvore
   const doc = parse(renderArvore(arvore(S.atuacoes, 'GOLDEN'), { profundidadeAberta: 9, pessoas: S.pessoasPorId }));
   const cam = [...doc.querySelectorAll('[data-atuacao]')].filter(el => el.dataset.pessoa === 'CAM');

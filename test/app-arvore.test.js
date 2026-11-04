@@ -170,6 +170,7 @@ test('clique na caixa seleciona a atuação e avisa; recolher não redesenha; Se
 test('visão Rede: cartão da unidade sai do vermelho quando todos têm líder', async () => {
   const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES_CORP);
   window.eval(ADMIN);
+  window.LGH.marcarLider(S, 'GOLDEN|GG|1', true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
   for (const a of window.LGH.semSuperior(S.atuacoes, 'GOLDEN')) assert.equal(window.LGH.definirSuperior(S, a.id, 'GOLDEN|GG|1', 'RH Teste').ok, true, a.id);
   window.eval('reconstruirViews()');
   window.irPara('arvore'); escolher(window, document, '#ar-org', CORP);

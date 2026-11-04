@@ -395,7 +395,8 @@ function marcarDefinido(a, autor, quando) {
  * Define `superiorAtuacaoId` como superior da pessoa da atuação `atuacaoId`.
  * Sem superior: passa a ter. Já tem outro: nasce uma segunda atuação da pessoa com este superior (D14).
  * Já tem este mesmo superior em alguma atuação: nada muda.
- * Recusa: raiz, a própria pessoa, outra organização, ciclo, avaliação mútua entre pessoas (R15).
+ * Recusa: raiz, a própria pessoa, outra organização, ciclo, avaliação mútua entre pessoas (R15) e superior sem marca de líder
+ * (R20: podeLiderar === false; a Matriz já só oferece líderes, e a carga não passa por aqui).
  * Devolve { ok: true, acao: 'definido' | 'criada' | 'nenhuma', atuacao } ou { ok: false, codigo, mensagem }.
  */
 export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando = hoje()) {
@@ -414,6 +415,7 @@ function definirSuperiorSemTransacao(S, atuacaoId, superiorAtuacaoId, autor, qua
   if (estaAcima(S, a.organizacaoId, a.pessoaRef, sup.pessoaRef)) {
     throw new ErroAdaptador('avaliacao_mutua', 'Avaliação mútua: esta pessoa já está acima do superior escolhido na organização', { id: a.id, superiorId: sup.id });
   }
+  exigirLider(sup);
   const alvo = a.superiorId == null ? a : null;
   if (alvo) {
     // ciclo: subindo a partir do superior não se pode chegar à própria atuação
@@ -465,6 +467,79 @@ function encerrar(S, a, destino, autor, quando) {
     marcarDefinido(s, autor, quando);
   }
   a.fim = quando; a.situacao = 'encerrada'; a.encerradaPor = autor ?? null;
+}
+
+/** R20: só atuação marcada como líder recebe subordinado. Ausente (undefined) não recusa: só a marca explícita false. */
+function exigirLider(sup) {
+  if (sup.podeLiderar === false) throw new ErroAdaptador('superior_sem_marca_de_lider', `${sup.id} não está marcado como líder`, { superiorId: sup.id });
+}
+
+/**
+ * Confirma o vínculo inferido pela carga (Tarefa 5): o superior fica, a origem passa a 'definido' com autor e data,
+ * e o método de inferência sai. Recusa atuação sem superior (sem_superior) e já definida (nao_inferido).
+ */
+export function confirmarInferido(S, atuacaoId, autor, quando = hoje()) {
+  const a = atuacaoPorId(S, atuacaoId);
+  return transacao(S, a ? a.organizacaoId : null, () => {
+    const x = exigir(S, atuacaoId, 'Atuação');
+    if (x.superiorId == null) throw new ErroAdaptador('sem_superior', `A atuação ${x.id} não tem superior para confirmar`, { id: x.id });
+    if (!/^inferido_/.test(x.origem || '')) throw new ErroAdaptador('nao_inferido', `O vínculo de ${x.id} não é inferido`, { id: x.id });
+    marcarDefinido(x, autor, quando);
+    x.metodoInferencia = null;
+    return { acao: 'confirmado', atuacao: x };
+  });
+}
+
+/**
+ * Raiz da organização (Tarefa 5, D20): marca a atuação como raiz e tira a marca da raiz anterior da mesma organização,
+ * que fica sem superior (volta ao pool). Recusa atuação com superior (raiz_com_superior). Depois da troca a árvore precisa
+ * ser válida (validarArvore, exatamente uma raiz); se não for, nada muda.
+ */
+export function marcarRaiz(S, atuacaoId, autor, quando = hoje()) {
+  const a = atuacaoPorId(S, atuacaoId);
+  return transacao(S, a ? a.organizacaoId : null, () => {
+    const x = exigir(S, atuacaoId, 'Atuação');
+    if (x.superiorId != null) throw new ErroAdaptador('raiz_com_superior', `A atuação ${x.id} tem superior e não pode ser raiz`, { id: x.id });
+    if (x.ehRaiz) return { acao: 'nenhuma', atuacao: x };
+    const anteriores = correntesDaOrg(S, x.organizacaoId).filter(r => r.ehRaiz);
+    for (const r of anteriores) { r.ehRaiz = false; marcarDefinido(r, autor, quando); }
+    x.ehRaiz = true;
+    marcarDefinido(x, autor, quando);
+    validarArvore(S.atuacoes, x.organizacaoId);   // lança com o código de validarArvore; a transação desfaz
+    return { acao: 'raiz', atuacao: x, anteriores: anteriores.map(r => r.id) };
+  });
+}
+
+/**
+ * Atuação nova de uma pessoa numa organização, sob um superior de lá (Tarefa 5): é como o RH liga ao corporativo quem está
+ * sem organização (PJ da carga) ou o gerente geral de uma unidade. Origem 'definido', id que nunca se repete (R16).
+ * Chama-se criarAtuacaoNaOrganizacao, e não criarAtuacao, porque o bundle reexporta modelo/atuacao.js, que já tem criarAtuacao.
+ * Recusa: pessoa inexistente, superior de outra organização, sem marca de líder (R20), a própria pessoa, avaliação mútua.
+ * A pessoa já sob este superior: nada muda (acao 'nenhuma').
+ */
+export function criarAtuacaoNaOrganizacao(S, { pessoaId, organizacaoId, superiorAtuacaoId, funcao, autor, quando = hoje() } = {}) {
+  return transacao(S, organizacaoId, () => {
+    if (!organizacao(S, organizacaoId)) throw new ErroAdaptador('organizacao_inexistente', `Organização ${organizacaoId} não existe`, { organizacaoId });
+    if (!pessoaPorId(S, pessoaId)) throw new ErroAdaptador('pessoa_inexistente', `Pessoa ${pessoaId} não existe na base`, { pessoaId });
+    const sup = exigir(S, superiorAtuacaoId, 'Superior');
+    if (sup.organizacaoId !== organizacaoId) throw new ErroAdaptador('superior_fora_da_organizacao', `O superior ${sup.id} é de outra organização`, { pessoaId, superiorId: sup.id });
+    if (sup.pessoaRef === pessoaId) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia: a pessoa não pode ser superior de si mesma', { pessoaId });
+    const ja = correntesDaPessoa(S, pessoaId, organizacaoId).find(x => x.superiorId === sup.id);
+    if (ja) return { acao: 'nenhuma', atuacao: ja };
+    if (estaAcima(S, organizacaoId, pessoaId, sup.pessoaRef)) {
+      throw new ErroAdaptador('avaliacao_mutua', 'Avaliação mútua: esta pessoa já está acima do superior escolhido na organização', { pessoaId, superiorId: sup.id });
+    }
+    exigirLider(sup);
+    if (funcao == null || funcao === '') throw new ErroAdaptador('sem_funcao', `A atuação nova de ${pessoaId} precisa de função`, { pessoaId });
+    const nova = {
+      id: proximoId(S, organizacaoId, pessoaId), pessoaRef: pessoaId, organizacaoId, funcao,
+      superiorId: sup.id, ehRaiz: false, setor: null, turno: null, equipe: null,
+      inicio: quando, fim: null, situacao: 'ativa', origem: 'definido', metodoInferencia: null, confirmadaPor: autor ?? null,
+      definidaEm: quando, podeLiderar: false,
+    };
+    S.atuacoes.push(nova);
+    return { acao: 'criada', atuacao: nova };
+  });
 }
 
 /** Marca de líder da atuação (D17). */

@@ -150,6 +150,7 @@ test('trocar a organização com nota digitada não leva a nota para outra pesso
 test('R16 na página: atuação desfeita não devolve o id; a nova não herda a avaliação', async () => {
   const { S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
   window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  window.LGH.marcarLider(S, 'GOLDEN|GG|1', true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
   const criar = () => window.eval("tentarMudar('x', ()=>LGH.definirSuperior(S,'GOLDEN|CAM|1','GOLDEN|GG|1','RH')).valor.atuacao.id");
   assert.equal(criar(), 'GOLDEN|CAM|2');
   window.eval(`S.colab = colabPorAtuacao('GOLDEN|CAM|2'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
@@ -172,6 +173,7 @@ test('R16 na página: id de atuação que só existe numa chave do banco fica re
   }) };
   const { window } = await carregarPagina(base(), piloto(), stub, OPCOES);
   await tick(60);
+  window.eval("LGH.marcarLider(S, 'GOLDEN|GG|1', true)");   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
   const id = window.eval("LGH.definirSuperior(S,'GOLDEN|CAM|1','GOLDEN|GG|1','RH').atuacao.id");
   assert.equal(id, 'GOLDEN|CAM|3');
 });
@@ -213,7 +215,7 @@ test('R18: indicação tem organização; RH vê na lista só a do topo, o alert
   window.eval("trocarOrganizacao('BRANO')");
   igual(ids(), ['i2']);
   // avaliador acima do líder, pelas atuações: GG acima de SUP
-  window.eval("LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|GG|1','RH'); reconstruirViews(); document.querySelector('#trocar').click(); entrar({nome:'Gerente Geral Teste', cargo:'GG', papel:'avaliador', nivel:'N4'}); irPara('indicacoes')");
+  window.eval("LGH.marcarLider(S,'GOLDEN|GG|1',true); LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|GG|1','RH'); reconstruirViews(); document.querySelector('#trocar').click(); entrar({nome:'Gerente Geral Teste', cargo:'GG', papel:'avaliador', nivel:'N4'}); irPara('indicacoes')");
   igual(ids(), ['i1'], 'GG vê a indicação da supervisora que ele avalia no Golden');
   void S;
 });
