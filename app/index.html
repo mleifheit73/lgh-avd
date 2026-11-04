@@ -1775,11 +1775,17 @@ function renderRelatorio(){
   $('#rel-texto').textContent = S.relatorio;
   $('#rel-tag').hidden = !S.relatorio;
 }
+/* M5: fora do claude.ai não há window.claude (ou use() falha): a geração por IA fica indisponível, sem exceção no clique. */
+const MSG_IA_INDISPONIVEL = 'Geração por IA indisponível nesta visualização.';
+async function obterSample(){
+  if(typeof claude === 'undefined' || !claude || typeof claude.use !== 'function') return null;
+  try{ return await claude.use('sample'); }catch(e){ return null; }
+}
 $('#rel-gerar').onclick = async ()=>{
   const alvo=$('#rel-texto'), btn=$('#rel-gerar'), parar=$('#rel-parar');
-  const sample = await claude.use('sample');
+  const sample = await obterSample();
   if(!sample){
-    alvo.innerHTML = '<span class="skel">A geração por IA não está disponível nesta visualização. ' +
+    alvo.innerHTML = '<span class="skel">' + MSG_IA_INDISPONIVEL + ' ' +
       'Abra o protótipo na sua conta do Claude para ver o relatório ser escrito em tempo real.</span>';
     return;
   }
@@ -3052,8 +3058,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     }
     $('#ind-gerar').onclick = async ()=>{
       const alvo = $('#ind-parecer'), btn = $('#ind-gerar'); btn.disabled = true;
-      const sample = await claude.use('sample');
-      if(!sample){ alvo.innerHTML = '<span class="skel">A geração por IA não está disponível nesta visualização. Abra o protótipo na sua conta do Claude.</span>'; btn.disabled=false; return; }
+      const sample = typeof obterSample === 'function' ? await obterSample() : null;
+      if(!sample){ alvo.innerHTML = '<span class="skel">' + (typeof MSG_IA_INDISPONIVEL === 'string' ? MSG_IA_INDISPONIVEL : 'Geração por IA indisponível nesta visualização.') + ' Abra o protótipo na sua conta do Claude.</span>'; btn.disabled=false; return; }
       const corpo = envios.map(v => { const pil = (window.LGH_FORM ? LGH_FORM.pilaresDe(v) : FORMS[v.tipo].pilares);
         return `${v.cicloNome||'Ciclo'} (${v.tipo==='lider'?'formulário de líder':'formulário de colaborador'}, nota final ${num(v.media)}, enviada em ${v.em} por ${v.por}):\n` +
           pil.map((pi,i)=>pi.c.map((c,j)=>{ const k=i+'.'+j; return v.notas[k]!=null ? `  - ${c} | nota ${num(v.notas[k])}${v.obs&&v.obs[k]?` | observação: ${v.obs[k]}`:''}` : null; }).filter(Boolean).join('\n')).join('\n'); }).join('\n\n');

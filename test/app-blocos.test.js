@@ -221,3 +221,15 @@ test('R18: indicação tem organização; RH vê na lista só a do topo, o alert
   igual(ids(), ['i1'], 'GG vê a indicação da supervisora que ele avalia no Golden');
   void S;
 });
+
+test('M5: sem window.claude, gerar relatório e parecer por IA não lança e avisa que a IA está indisponível', async () => {
+  const { window, document, erros } = await carregarPagina(lerFixture('base-mini.json'), {}, false);
+  assert.equal(typeof window.claude, 'undefined', 'premissa: página fora do claude.ai');
+  await document.querySelector('#rel-gerar').onclick();
+  assert.match(document.querySelector('#rel-texto').textContent, /Geração por IA indisponível nesta visualização/);
+  assert.equal(await window.eval('obterSample()'), null);
+  /* use() que rejeita também vira indisponível */
+  window.claude = { use: async () => { throw new Error('sem capacidade'); } };
+  assert.equal(await window.eval('obterSample()'), null);
+  assert.deepEqual(erros.map(String), []);
+});

@@ -10,7 +10,8 @@ export function lerFixture(nome) {
 /**
  * Monta app/index.html no jsdom com fetch simulado (data/base.json, data/piloto-golden.json e a tabela de equivalência real)
  * e espera o boot terminar (S.pronto === true). Rejeita se o boot falhar (S.erroBoot) ou passar de 5s.
- * claudeStub (opcional) substitui window.claude, por exemplo para simular o banco do artefato.
+ * claudeStub (opcional) substitui window.claude, por exemplo para simular o banco do artefato. false: a página carrega sem
+ * window.claude, como fora do claude.ai (M5).
  * opcoes (opcional) vira window.LGH_CONFIG: { fusoes, organizacaoPiloto, organizacaoInicial, atuacoesExtras }.
  * O bundle de verdade (app/js/lgh.bundle.js, gerado pelo pretest) é executado antes dos scripts da página:
  * o jsdom não carrega <script src> sem resources, então o texto do arquivo é avaliado na janela.
@@ -33,7 +34,7 @@ export async function carregarPagina(baseJson, piloto = {}, claudeStub = null, o
     virtualConsole,
     beforeParse(window) {
       if (claudeStub) claudeStub.janela = window; // o stub pode consultar o estado da página (ex.: S.pronto)
-      window.claude = claudeStub || { use: async () => null };
+      if (claudeStub !== false) window.claude = claudeStub || { use: async () => null };
       window.scrollTo = () => {};
       window.HTMLElement.prototype.scrollIntoView = function () {};
       if (opcoes) window.LGH_CONFIG = JSON.parse(JSON.stringify(opcoes));
