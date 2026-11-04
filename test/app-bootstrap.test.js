@@ -52,18 +52,38 @@ test('atuacoesIniciais: piloto dá setor, podeLiderar e superior inferido_por_ca
   const sup = atuacoes.find(a => a.pessoaRef === 'SUP');
   assert.equal(sup.podeLiderar, true); assert.equal(sup.superiorId, null); assert.equal(sup.setor, 'Governança');
   assert.equal(atuacoes.find(a => a.pessoaRef === 'REC1').superiorId, 'GOLDEN|GG|1');
-  // R10: BR1, BR2 e BR3 estão no piloto e foram realocados do BRANO para o Golden
-  assert.equal(atuacoes.find(a => a.pessoaRef === 'BR2').superiorId, 'GOLDEN|BR3|1');
+  const br2 = atuacoes.find(a => a.pessoaRef === 'BR2');   // Brano não está no piloto: fica com a carga e sem superior
+  assert.equal(br2.organizacaoId, 'BRANO'); assert.equal(br2.superiorId, null); assert.equal(br2.origem, 'carga');
   assert.ok(!log.some(l => l.codigo === 'avaliador_nao_encontrado'));
 });
-test('atuacoesIniciais: avaliador sem atuação na organização do piloto é logado e o superior fica null', () => {
+test('atuacoesIniciais: avaliador sem atuação na organização do piloto é logado e o superior fica null; Ana mantém as duas atuações', () => {
   const { atuacoes, log } = iniciais(pilotoMini());
   const ana = atuacoesDe(atuacoes, 'ANA');
-  assert.equal(ana.length, 1, 'Ana está no piloto: uma atuação só, no Golden');
-  assert.equal(ana[0].organizacaoId, 'GOLDEN'); assert.equal(ana[0].superiorId, null);
-  const l = log.filter(x => x.codigo === 'avaliador_fora_da_organizacao');
-  assert.equal(l.length, 1);
-  assert.equal(l[0].avaliador, 'CEO DA REDE TESTE');
+  assert.deepEqual(ana.map(a => a.organizacaoId).sort(), ['BRANO', 'GOLDEN']);
+  assert.ok(ana.every(a => a.superiorId === null));
+  const l = log.filter(x => x.codigo === 'avaliador_fora_da_organizacao' && x.id.includes('ANA'));
+  assert.ok(l.length >= 1 && l.every(x => x.avaliador === 'CEO DA REDE TESTE'));
+  assert.ok(!log.some(x => x.codigo === 'realocado_pelo_piloto' && x.pessoaId === 'ANA'), 'Ana já tem atuação no Golden');
+});
+test('atuacoesIniciais: pessoa do piloto só com PJ sem organização ganha atuação no piloto e sai do pool', () => {
+  const { atuacoes, semOrganizacao, log } = iniciais(pilotoMini());
+  const a = atuacoesDe(atuacoes, 'PJ-SEM-ORG');
+  assert.equal(a.length, 1);
+  assert.equal(a[0].organizacaoId, 'GOLDEN'); assert.equal(a[0].origem, 'inferido_por_cargo'); assert.equal(a[0].metodoInferencia, 'piloto');
+  assert.equal(a[0].superiorId, 'GOLDEN|GG|1'); assert.equal(a[0].setor, 'Manutenção'); assert.equal(a[0].funcao, 'CONSULTOR EXTERNO');
+  assert.ok(!semOrganizacao.some(p => p.id === 'PJ-SEM-ORG'));
+  assert.ok(log.some(l => l.codigo === 'atuacao_criada_pelo_piloto' && l.pessoaId === 'PJ-SEM-ORG'));
+});
+test('atuacoesIniciais: várias atuações fora do piloto e nenhuma nele: move a primeira por id e loga as mantidas', () => {
+  const p = { 'ANA TESTE DUPLA FILIAL': { nome: 'x', setor: 's', equipe: 's', lider: false, avaliadores: [], funcao: 'x', situacao: 'Ativo' } };
+  // Ana: GOLDEN RESORT e BRANO, nenhuma em OUTRA
+  const b = base();
+  const orgs = organizacoesDe(b, [{ id: 'OUTRA', nome: 'Outra', filiais: ['GOLDEN A&B'] }]);
+  const r = atuacoesIniciais(b, orgs, p, { organizacaoPiloto: 'OUTRA' });
+  assert.deepEqual(atuacoesDe(r.atuacoes, 'ANA').map(a => a.organizacaoId).sort(), ['GOLDEN RESORT', 'OUTRA']);
+  const m = r.log.find(l => l.codigo === 'realocado_pelo_piloto_multiplas');
+  assert.deepEqual(m.mantidas, ['GOLDEN RESORT']);
+  assert.equal(r.log.find(l => l.codigo === 'realocado_pelo_piloto' && l.pessoaId === 'ANA').de, 'BRANO');
 });
 test('atuacoesIniciais: pessoa do piloto com vínculo em outra filial é realocada para a organização do piloto (R10)', () => {
   const { atuacoes, log } = iniciais(pilotoMini());
@@ -73,6 +93,7 @@ test('atuacoesIniciais: pessoa do piloto com vínculo em outra filial é realoca
   assert.equal(br1[0].origem, 'inferido_por_cargo'); assert.equal(br1[0].superiorId, 'GOLDEN|GG|1'); assert.equal(br1[0].setor, 'Recepção');
   assert.deepEqual(log.find(l => l.codigo === 'realocado_pelo_piloto' && l.pessoaId === 'BR1'), { codigo: 'realocado_pelo_piloto', mensagem: log.find(l => l.codigo === 'realocado_pelo_piloto' && l.pessoaId === 'BR1').mensagem, pessoaId: 'BR1', de: 'BRANO', para: 'GOLDEN' });
   assert.ok(!atuacoes.some(a => a.pessoaRef === 'BR1' && a.organizacaoId === 'BRANO'));
+  assert.ok(atuacoes.some(a => a.pessoaRef === 'BR2' && a.organizacaoId === 'BRANO'), 'quem não está no piloto não é movido');
 });
 test('atuacoesIniciais: sem a organização do piloto em organizacoes, nada é realocado', () => {
   const { atuacoes, log } = atuacoesIniciais(base(), organizacoesDe(base(), FUSAO_MINI), pilotoMini(), { organizacaoPiloto: 'NAO EXISTE' });
@@ -152,9 +173,12 @@ test('base real: PJ inferidos, pool sem organização, raiz do Golden', { skip: 
   const raizesGolden = golden.filter(a => a.ehRaiz);
   console.log(`# organizações: ${orgs.length}; atuações: ${atuacoes.length}; inferidas por empresa: ${inferidas.length} ${JSON.stringify(porMetodo)}; sem organização: ${semOrganizacao.length}`);
   console.log(`# atuações no Golden: ${golden.length}; raízes: ${raizesGolden.map(a => a.pessoaRef + ' ' + a.funcao).join(', ')}; log por código: ${JSON.stringify(porCodigo)}`);
+  const semPiloto = atuacoesIniciais(baseReal, orgs, {});
+  assert.equal(semPiloto.semOrganizacao.length - (porCodigo.atuacao_criada_pelo_piloto ?? 0), semOrganizacao.length, 'o pool diminui exatamente pelas atuações criadas pelo piloto');
   assert.ok(inferidas.length >= 100);
   assert.ok(semOrganizacao.length >= 100 && semOrganizacao.length <= 140);
   assert.equal(raizesGolden.length, 1);
+  console.log(`# criadas pelo piloto (só PJ sem organização): ${porCodigo.atuacao_criada_pelo_piloto ?? 0}; realocadas: ${porCodigo.realocado_pelo_piloto ?? 0}; mantidas (múltiplas): ${porCodigo.realocado_pelo_piloto_multiplas ?? 0}`);
   assert.equal(porCodigo.avaliador_fora_da_organizacao ?? 0, 0, 'todo avaliador do piloto tem atuação no Golden');
   assert.ok((porCodigo.realocado_pelo_piloto ?? 0) >= 1);
   if (golden.filter(a => ['GERENTE GERAL', 'GERENTE GERAL SENIOR'].includes(a.funcao.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase())).length > 1) {

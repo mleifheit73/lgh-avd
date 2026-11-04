@@ -49,6 +49,7 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
   // 1. Um candidato por (pessoa, organização). CLT vence PJ (spec 3.4: vínculo não cria atuação).
   const candidatos = new Map();   // `${org}|${pessoa}` -> candidato
   const ordem = [];
+  const pjVinculo = new Map();    // pessoaId -> primeiro vínculo PJ sem organização
   const pjSemOrg = new Map();     // pessoaId -> [{ empresa, cargo }]
   for (const v of base.vinculos) {
     let orgId; let origem; let metodo = null;
@@ -61,20 +62,43 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
       if (!r) {
         if (!pjSemOrg.has(v.pessoaId)) pjSemOrg.set(v.pessoaId, []);
         pjSemOrg.get(v.pessoaId).push({ empresa: v.empresa, cargo: v.cargo ?? null });
+        if (!pjVinculo.has(v.pessoaId)) pjVinculo.set(v.pessoaId, v);
         continue;
       }
       orgId = r.organizacaoId; origem = 'inferido_por_empresa'; metodo = r.metodo;
-    }
-    // R10: quem está no piloto validado pelo RH tem a atuação na organização do piloto, não na filial de folha (spec 3.4).
-    if (pilotoAtivo && orgId !== organizacaoPiloto && pilotoDe(pessoas.get(v.pessoaId))) {
-      aviso('realocado_pelo_piloto', `${v.pessoaId} está no piloto: atuação movida de ${orgId} para ${organizacaoPiloto}`, { pessoaId: v.pessoaId, de: orgId, para: organizacaoPiloto });
-      orgId = organizacaoPiloto; origem = 'inferido_por_cargo'; metodo = 'piloto';
     }
     const chave = `${orgId}|${v.pessoaId}`;
     const atual = candidatos.get(chave);
     if (atual && prioridade(atual.origem) <= prioridade(origem)) continue;   // mantém o de maior confiança: carga, depois empresa, depois piloto
     if (!atual) ordem.push(chave);
     candidatos.set(chave, { pessoaId: v.pessoaId, orgId, origem, metodo, vinculo: v });
+  }
+
+  // R10: quem está no piloto validado pelo RH tem atuação na organização do piloto (spec 3.4: a organização segue a operação, não o CNPJ pagador).
+  // Já tem atuação lá: nada muda (as outras ficam onde a carga pôs). Não tem: move a primeira (por id de organização) das que a carga criou
+  // ou, se só havia PJ sem organização, cria a atuação a partir desse vínculo.
+  if (pilotoAtivo) {
+    for (const pessoa of base.pessoas) {
+      if (!pilotoDe(pessoa)) continue;
+      const pid = pessoa.id;
+      const minhas = ordem.filter(k => candidatos.get(k).pessoaId === pid);
+      if (minhas.some(k => candidatos.get(k).orgId === organizacaoPiloto)) continue;
+      if (minhas.length > 0) {
+        const k = [...minhas].sort((x, y) => comparar(candidatos.get(x).orgId, candidatos.get(y).orgId))[0];
+        const c = candidatos.get(k);
+        aviso('realocado_pelo_piloto', `${pid} está no piloto: atuação movida de ${c.orgId} para ${organizacaoPiloto}`, { pessoaId: pid, de: c.orgId, para: organizacaoPiloto });
+        if (minhas.length > 1) aviso('realocado_pelo_piloto_multiplas', `${pid} tem ${minhas.length} atuações fora do piloto: só a primeira foi movida, as outras ficam`, { pessoaId: pid, mantidas: minhas.filter(x => x !== k).map(x => candidatos.get(x).orgId) });
+        const novo = `${organizacaoPiloto}|${pid}`;
+        candidatos.delete(k);
+        ordem[ordem.indexOf(k)] = novo;
+        candidatos.set(novo, { ...c, orgId: organizacaoPiloto, origem: 'inferido_por_cargo', metodo: 'piloto' });
+      } else if (pjVinculo.has(pid)) {
+        const novo = `${organizacaoPiloto}|${pid}`;
+        aviso('atuacao_criada_pelo_piloto', `${pid} está no piloto e só tinha PJ sem organização: atuação criada em ${organizacaoPiloto}`, { pessoaId: pid, para: organizacaoPiloto });
+        ordem.push(novo);
+        candidatos.set(novo, { pessoaId: pid, orgId: organizacaoPiloto, origem: 'inferido_por_cargo', metodo: 'piloto', vinculo: pjVinculo.get(pid) });
+      }
+    }
   }
 
   // 2. Atuação n=1 de cada candidato, com setor, equipe e podeLiderar do piloto quando a pessoa está nele.
