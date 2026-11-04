@@ -3068,6 +3068,235 @@ Regras:
   window.LGH_IND = { criarIndicacao, mudarStatus, podeRetirar, lista: INDICACOES };
 })();
 </script>
+<!-- ===== BLOCO ÁRVORE (Plano B, Tarefa 4, 04/11/2026): aba Árvore da organização, colapsável, com origem do vínculo,
+     medidor de líderes, lista Sem líder e visão Rede (estrutura corporativa com as unidades como cartões fechados, D20).
+     Bloco independente: remover este <style> e este <script> devolve o menu e as telas da v34. Só lê S.atuacoes. ===== -->
+<style id="bloco-arvore-css">
+#t-arvore .ar-topo{display:grid;gap:12px;margin-bottom:12px}
+#t-arvore .ar-filtros{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+#t-arvore .ar-filtros select{max-width:min(100%,320px)}
+#ar-cabecalho{font-size:.9rem}
+#ar-cabecalho:empty{display:none}
+#t-arvore .ar-alerta{color:var(--crit);font-weight:600}
+#t-arvore .ar-medidor p{margin:0}
+#t-arvore .ar-medidor .ar-frase{font-family:var(--f-disp);font-size:1.05rem;font-weight:600}
+#t-arvore .ar-medidor .ar-frase .k{color:var(--crit)}
+#t-arvore .ar-medidor .bar{margin:8px 0 6px;height:8px}
+#t-arvore .ar-detalhe{font-size:.8rem;color:var(--muted)}
+#t-arvore .ar-faixa{border-left:3px solid var(--crit);background:var(--crit-soft);color:var(--crit);
+  padding:10px 13px;border-radius:0 9px 9px 0;font-size:.86rem;margin-bottom:12px}
+#t-arvore .ar-faixa.neutra{border-left-color:var(--line);background:var(--surface-2);color:var(--muted)}
+#t-arvore .ar-faixa ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+#t-arvore .ar-faixa button{font-size:.8rem;font-weight:600;color:inherit;text-decoration:underline;text-underline-offset:3px}
+#t-arvore .ar-faixa .motivo{font-weight:400;opacity:.85}
+#ar-sem-lider[hidden],#ar-sem-ligacao[hidden],#ar-pool[hidden]{display:none}
+#t-arvore .ar-bloco{margin-bottom:14px}
+#t-arvore .ar-bloco>h2{font-size:1rem;margin:0 0 8px}
+#t-arvore .ar-arvore{overflow-x:auto;padding:4px 2px 10px}
+/* árvore: listas aninhadas, conectores por borda à esquerda */
+#t-arvore .ar-nivel{list-style:none;margin:0;padding:0}
+#t-arvore .ar-nivel[hidden]{display:none}
+#t-arvore .ar-sub{margin-left:18px}
+#t-arvore .ar-no{padding-top:8px}
+#t-arvore .ar-sub>.ar-no{position:relative;padding-left:20px;border-left:1px solid var(--line)}
+#t-arvore .ar-sub>.ar-no:last-child{border-left-color:transparent}
+#t-arvore .ar-sub>.ar-no::before{content:"";position:absolute;left:-1px;top:0;width:18px;height:30px;
+  border-left:1px solid var(--line);border-bottom:1px solid var(--line);border-bottom-left-radius:8px}
+#t-arvore .ar-caixa{display:inline-grid;gap:2px;min-width:min(100%,250px);max-width:440px;background:var(--surface);
+  border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:8px 12px;cursor:pointer;text-align:left}
+#t-arvore .ar-caixa:hover{border-color:var(--accent)}
+#t-arvore .ar-caixa.ar-ativa{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#t-arvore .ar-caixa.ar-sem-superior{border-left-color:var(--crit);background:var(--crit-soft)}
+#t-arvore .ar-caixa.ar-marcada{outline:2px solid var(--crit);outline-offset:2px}
+#t-arvore .ar-cab{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+#t-arvore .ar-nome{font-weight:600;font-size:.9rem}
+#t-arvore .ar-funcao{font-size:.8rem;color:var(--muted)}
+#t-arvore .ar-pe{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.76rem;color:var(--muted)}
+#t-arvore .ar-lider{color:var(--accent-ink);font-weight:600}
+#t-arvore .ar-falta{color:var(--crit);font-weight:600}
+#t-arvore .ar-colapso{margin-left:auto;font-size:.76rem;font-weight:600;color:var(--accent);padding:2px 6px;border-radius:6px}
+#t-arvore .ar-colapso:hover{background:var(--accent-soft)}
+/* cartão fechado da unidade, dentro da caixa do gerente geral na visão Rede */
+#t-arvore .ar-unidade{margin-top:8px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);
+  padding:8px 10px;display:grid;gap:3px;cursor:pointer}
+#t-arvore .ar-unidade:hover{border-color:var(--accent)}
+#t-arvore .ar-unidade b{font-family:var(--f-disp);font-size:.88rem}
+#t-arvore .ar-unidade span{font-size:.78rem;color:var(--muted)}
+#t-arvore .ar-unidade .k{color:var(--crit);font-weight:600}
+#t-arvore .ar-unidade .bar{height:5px}
+#t-arvore .ar-unidade.ar-unidade-vermelha{border-color:var(--crit);background:var(--crit-soft)}
+#t-arvore .ar-legenda{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.8rem;color:var(--muted);margin-top:6px}
+#t-arvore .ar-legenda>span{display:inline-flex;align-items:center;gap:6px}
+#t-arvore .ar-vazio{color:var(--muted);font-size:.88rem;margin:0}
+@media (max-width:640px){#t-arvore .ar-sub{margin-left:8px}#t-arvore .ar-sub>.ar-no{padding-left:14px}
+  #t-arvore .ar-sub>.ar-no::before{width:12px}#t-arvore .ar-caixa{min-width:0}}
+</style>
+<script id="bloco-arvore">
+(function(){
+  if(typeof TELAS === 'undefined' || typeof LGH === 'undefined' || typeof LGH.renderArvore !== 'function') return;
+  const CORP = LGH.ID_CORPORATIVO;
+  const nomePessoa = pid => LGH.nomeExibicao(S, S.pessoasPorId && S.pessoasPorId.get(pid)) || pid;
+  const nomeOrg = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
+  const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
+
+  /* ---- aba: logo depois da Matriz ---- */
+  const iMatriz = TELAS.findIndex(t=>t.id==='matriz');
+  TELAS.splice(iMatriz >= 0 ? iMatriz + 1 : TELAS.length, 0, {id:'arvore', t:'Árvore', req:'verMatriz'});
+  const sec = document.createElement('section'); sec.id = 't-arvore'; sec.hidden = true;
+  sec.innerHTML = `<div class="head"><h1>Árvore da organização</h1>
+      <p>Quem avalia quem, desenhado a partir das atuações. Cada caixa é uma atuação: quem tem dois líderes aparece duas vezes. A etiqueta diz de onde veio o vínculo.</p></div>
+    <div class="card ar-topo">
+      <div class="ar-filtros">
+        <label class="lbl">Organização <select id="ar-org"></select></label>
+        <label class="lbl">Empresa <select id="ar-empresa"></select></label>
+      </div>
+      <div id="ar-cabecalho"></div>
+      <div id="ar-medidor" class="ar-medidor"></div>
+    </div>
+    <div id="ar-sem-ligacao" hidden></div>
+    <div id="ar-pool" hidden></div>
+    <div id="ar-sem-lider" class="ar-bloco" hidden></div>
+    <div class="card ar-bloco"><h2 id="ar-titulo-arvore">Árvore</h2><div id="ar-arvore" class="ar-arvore"></div>
+      <div id="ar-legenda" class="ar-legenda"></div></div>`;
+  document.querySelector('main').appendChild(sec);
+
+  /* ---- pedaços ---- */
+  function medidorHtml(r, compacto){
+    const precisam = r.total - r.raiz;
+    const pct = precisam ? Math.round(100 * r.comSuperior / precisam) : 0;
+    const frase = `<b class="num">${r.comSuperior}</b> de <b class="num">${precisam}</b> com líder definido, <b class="num k">${r.semSuperior}</b> sem líder`;
+    if(compacto) return `<span>${frase}</span><div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
+    return `<p class="ar-frase" title="Contagem por atuação: a raiz não tem líder por definição e quem tem dois líderes conta duas vezes">${frase}</p>
+      <div class="bar" role="img" aria-label="${pct}% das atuações com líder"><i style="width:${pct}%"></i></div>
+      <p class="ar-detalhe">${plural(r.pessoas,'pessoa','pessoas')} em ${plural(r.total,'atuação','atuações')}${r.raiz?', 1 delas é a raiz':''}. Origem dos vínculos: ${r.inferidos} ${r.inferidos===1?'inferido':'inferidos'} pela carga (cargo ou empresa), ${r.definidos} ${r.definidos===1?'definido':'definidos'} pelo RH.</p>`;
+  }
+  function cartaoUnidade(orgId){
+    const r = LGH.resumoOrganizacao(S, orgId), l = LGH.ligacaoDaUnidade(S, orgId);
+    const vermelha = !l.raiz || !l.ligada;
+    return `<div class="ar-unidade${vermelha?' ar-unidade-vermelha':''}" role="button" tabindex="0" data-unidade="${esc(orgId)}" title="Abrir a árvore de ${esc(nomeOrg(orgId))}">
+      <b>${esc(nomeOrg(orgId))}</b><span>Gerente geral: ${l.raiz ? esc(nomePessoa(l.raiz.pessoaRef)) : '<span class="k">sem raiz</span>'}</span>${medidorHtml(r, true)}</div>`;
+  }
+  function cabecalhoHtml(org){
+    if(org === CORP){
+      const raiz = LGH.raizDe(S, CORP);
+      return `Estrutura corporativa da rede${raiz ? ` · raiz: ${esc(nomePessoa(raiz.pessoaRef))}` : ''}. As unidades aparecem fechadas dentro da caixa do gerente geral; clique para abrir.`;
+    }
+    const o = (S.organizacoes||[]).find(x=>x.id===org) || {};
+    const papel = o.tipo === 'unidade' ? 'Gerente geral' : 'Responsável';
+    const l = LGH.ligacaoDaUnidade(S, org);
+    if(!l.raiz) return `<span class="ar-alerta">Sem ${papel.toLowerCase()} definido: a organização não tem raiz.</span>`;
+    const nome = esc(nomePessoa(l.raiz.pessoaRef));
+    if(!l.ligada) return `${papel}: ${nome} · <span class="ar-alerta">sem ligação ao corporativo</span>`;
+    const podeIr = LGH.organizacoesVisiveis(S).some(x=>x.id===CORP);
+    const link = podeIr ? ` <button class="linkish" data-ir-org="${esc(CORP)}">Ver na Rede</button>` : '';
+    const sup = l.superiores.length ? l.superiores.map(a=>esc(nomePessoa(a.pessoaRef))).join(' e ') : 'ninguém, é a raiz';
+    return `${papel}: ${nome} · avaliado por: ${sup} (estrutura corporativa)${link}`;
+  }
+  function semLigacaoHtml(){
+    const {semLigacao, motivos} = LGH.ligacoesCorporativas(S);
+    const motivo = id => motivos[id] === 'sem_raiz' ? 'sem gerente geral (raiz) definido'
+      : `${nomePessoa(LGH.raizDe(S, id).pessoaRef)} não tem atuação no corporativo`;
+    const visiveis = new Set(LGH.organizacoesVisiveis(S).map(o=>o.id));
+    return `<div class="ar-faixa${semLigacao.length?'':' neutra'}"><b>Unidades sem ligação ao corporativo: ${semLigacao.length}</b>
+      ${semLigacao.length ? `<ul>${semLigacao.map(id=>`<li>${visiveis.has(id)?`<button data-ir-org="${esc(id)}">${esc(nomeOrg(id))}</button>`:`<b>${esc(nomeOrg(id))}</b>`} <span class="motivo">(${esc(motivo(id))})</span></li>`).join('')}</ul>` : ''}</div>`;
+  }
+
+  /* ---- render ---- */
+  function renderArvoreTela(){
+    const org = S.organizacaoSelecionada;
+    /* seletores: espelho dos do topo (mesmas opções e mesmo valor); a corporativa aparece como Rede */
+    if(typeof pintarSeletorOrg === 'function') pintarSeletorOrg();
+    const top = $('#org-seletor'), topEmp = $('#org-empresa');
+    $('#ar-org').innerHTML = [...top.options].map(o=>`<option value="${esc(o.value)}"${o.value===org?' selected':''}>${o.value===CORP?'Rede (estrutura corporativa)':esc(o.textContent)}</option>`).join('');
+    $('#ar-empresa').innerHTML = [...topEmp.options].map(o=>`<option value="${esc(o.value)}"${o.value===topEmp.value?' selected':''}>${esc(o.textContent)}</option>`).join('');
+    if(!org){ $('#ar-arvore').innerHTML = '<p class="ar-vazio">Nenhuma organização no seu escopo.</p>'; return; }
+
+    const rede = org === CORP;
+    const r = LGH.resumoOrganizacao(S, org);
+    $('#ar-cabecalho').innerHTML = cabecalhoHtml(org);
+    $('#ar-medidor').innerHTML = medidorHtml(r, false);
+    const sl = $('#ar-sem-ligacao'), pool = $('#ar-pool');
+    sl.hidden = !rede; sl.innerHTML = rede ? semLigacaoHtml() : '';
+    pool.hidden = !rede;
+    pool.innerHTML = rede ? `<div class="ar-faixa neutra">${r.semOrganizacao ? `<b>${plural(r.semOrganizacao,'pessoa','pessoas')} sem organização</b> (PJ sem filial correspondente), para o RH distribuir.` : 'Nenhuma pessoa sem organização: todo PJ da carga já tem atuação.'}</div>` : '';
+
+    const opcoes = {profundidadeAberta: 1, pessoas: S.pessoasPorId, destacarSemSuperior: true, nome: nomePessoa,
+      extra: rede ? (a => LGH.unidadesSob(S, a.id).map(cartaoUnidade).join('')) : null};
+    /* árvore a partir da raiz; validarArvore recusa estrutura inválida e a tela diz por quê */
+    let no = null, erro = null;
+    try{ no = LGH.arvore(S.atuacoes, org); }catch(e){ erro = e; }
+    $('#ar-titulo-arvore').textContent = rede ? 'Estrutura corporativa' : 'Árvore a partir da raiz';
+    $('#ar-arvore').innerHTML = no ? LGH.renderArvore(no, opcoes)
+      : erro && erro.codigo === 'sem_raiz'
+        ? `<p class="ar-vazio">${rede ? 'A estrutura corporativa' : 'Esta organização'} ainda não tem raiz${rede ? '' : ' (gerente geral)'}. Todas as atuações estão em Sem líder até o RH definir a raiz.</p>`
+        : `<p class="ar-alerta">A árvore tem uma inconsistência (${esc(erro && erro.codigo || 'erro')}): ${esc(erro && erro.message || '')}. As atuações sem líder estão listadas acima.</p>`;
+
+    /* sem líder: lista vermelha com os nomes e, abaixo, cada uma com quem está debaixo dela */
+    const soltas = LGH.foraDaArvore(S.atuacoes, org);
+    const sem = $('#ar-sem-lider');
+    sem.hidden = soltas.length === 0;
+    sem.innerHTML = soltas.length ? `<div class="ar-faixa"><b>Sem líder: ${soltas.length}</b>
+        <ul>${soltas.map(n=>`<li><button data-alvo="${esc(n.atuacao.id)}">${esc(nomePessoa(n.atuacao.pessoaRef))}</button></li>`).join('')}</ul></div>
+      <div class="card"><div class="ar-arvore">${soltas.map(n=>LGH.renderArvore(n, opcoes)).join('')}</div></div>` : '';
+
+    $('#ar-legenda').innerHTML = 'Origem do vínculo: ' + LGH.LEGENDA_ORIGEM.map(l=>`<span><span class="tag ${l.classe}">${esc(l.curto)}</span>${esc(l.texto)}</span>`).join('');
+    if(S.arSelecionada){ const c = caixaPorId(S.arSelecionada); if(c) c.classList.add('ar-ativa'); }
+  }
+  function caixaPorId(id){ return [...sec.querySelectorAll('.ar-caixa')].find(c=>c.dataset.atuacao===id) || null; }
+  function irOrg(id){
+    try{ trocarOrganizacao(id); }
+    catch(e){ $('#ar-cabecalho').innerHTML = `<span class="ar-alerta">${esc(avisoErro(e))}</span>`; }
+  }
+  function selecionar(c){
+    sec.querySelectorAll('.ar-caixa.ar-ativa').forEach(x=>x.classList.remove('ar-ativa'));
+    c.classList.add('ar-ativa');
+    S.arSelecionada = c.dataset.atuacao;
+    /* o painel de montagem (Tarefa 5) escuta este evento */
+    document.dispatchEvent(new CustomEvent('lgh-arvore-selecionada', {detail:{atuacaoId: c.dataset.atuacao}}));
+  }
+  function marcar(id){
+    const c = caixaPorId(id);
+    if(!c) return;
+    for(let ul = c.closest('ul'); ul && sec.contains(ul); ul = ul.parentElement && ul.parentElement.closest('ul')){
+      if(ul.hidden){ ul.hidden = false; const b = ul.parentElement.querySelector(':scope > .ar-caixa .ar-colapso'); if(b){ b.setAttribute('aria-expanded','true'); b.textContent = 'Recolher'; b.setAttribute('aria-label','Recolher os subordinados'); } }
+    }
+    sec.querySelectorAll('.ar-marcada').forEach(x=>x.classList.remove('ar-marcada'));
+    c.classList.add('ar-marcada');
+    c.scrollIntoView({block:'center', behavior:'smooth'});
+    c.focus({preventScroll:true});
+  }
+  function acionar(alvo){
+    const col = alvo.closest('.ar-colapso');
+    if(col){
+      const ul = col.closest('.ar-no').querySelector(':scope > ul');
+      if(ul){ ul.hidden = !ul.hidden; const aberto = !ul.hidden;
+        col.setAttribute('aria-expanded', String(aberto)); col.textContent = aberto ? 'Recolher' : 'Expandir';
+        col.setAttribute('aria-label', (aberto ? 'Recolher' : 'Expandir') + ' os subordinados'); }
+      return true;
+    }
+    const un = alvo.closest('.ar-unidade'); if(un){ irOrg(un.dataset.unidade); return true; }
+    const ir = alvo.closest('[data-ir-org]'); if(ir){ irOrg(ir.dataset.irOrg); return true; }
+    const m = alvo.closest('[data-alvo]'); if(m){ marcar(m.dataset.alvo); return true; }
+    const c = alvo.closest('.ar-caixa'); if(c){ selecionar(c); return true; }
+    return false;
+  }
+  sec.addEventListener('click', e=>{ if(e.target instanceof Element) acionar(e.target); });
+  sec.addEventListener('keydown', e=>{
+    if((e.key==='Enter' || e.key===' ') && e.target instanceof Element && e.target.matches('.ar-caixa,.ar-unidade')){ e.preventDefault(); acionar(e.target); }
+  });
+  sec.querySelector('#ar-org').addEventListener('change', e=>{ if(e.target.value) irOrg(e.target.value); });
+  sec.querySelector('#ar-empresa').addEventListener('change', e=>{
+    const top = $('#org-empresa'); top.value = e.target.value;
+    if(typeof top.onchange === 'function') top.onchange();
+    if(S.tela==='arvore') renderArvoreTela();
+  });
+
+  const irParaOriginalAr = irPara;
+  irPara = function(id){ irParaOriginalAr.apply(this, arguments); if(S.tela==='arvore') renderArvoreTela(); };
+  montarNav();
+  window.LGH_ARVORE = { render: renderArvoreTela };
+})();
+</script>
 
 
 
