@@ -103,21 +103,30 @@ export function poolSemOrganizacao(S) {
 
 /**
  * Contagens da organização, por atuação (quem tem dois líderes conta duas vezes, como na avaliação).
- * total = raiz + comSuperior + semSuperior. inferidos/definidos contam a origem do vínculo de todas as atuações correntes.
+ * total = raiz + comSuperior + semSuperior; precisamDeLider = total - raiz é o denominador de todas as partes:
+ * definidos + inferidos + comLiderOutraOrigem + semLiderCarga + semLiderRH = precisamDeLider.
  * semOrganizacao: tamanho do pool da rede (não é da organização), para o RH distribuir.
  */
 export function resumoOrganizacao(S, organizacaoId) {
   const lista = correntesDaOrg(S.atuacoes, organizacaoId);
   const raizes = lista.filter(a => a.ehRaiz);
+  const comLider = lista.filter(a => a.superiorId != null);
+  const soltas = semSuperior(S.atuacoes || [], organizacaoId);
+  const inferidos = comLider.filter(a => a.origem === 'inferido_por_cargo' || a.origem === 'inferido_por_empresa').length;
+  const definidos = comLider.filter(a => a.origem === 'definido').length;
   return {
     total: lista.length,
     pessoas: new Set(lista.map(a => a.pessoaRef)).size,
     raiz: raizes.length,
     raizId: raizes.length === 1 ? raizes[0].id : null,
-    comSuperior: lista.filter(a => a.superiorId != null).length,
-    semSuperior: semSuperior(S.atuacoes || [], organizacaoId).length,
-    inferidos: lista.filter(a => a.origem === 'inferido_por_cargo' || a.origem === 'inferido_por_empresa').length,
-    definidos: lista.filter(a => a.origem === 'definido').length,
+    precisamDeLider: lista.length - raizes.length,   // denominador único do medidor: atuações correntes menos a raiz
+    comSuperior: comLider.length,
+    semSuperior: soltas.length,
+    inferidos,                                       // com líder, vínculo inferido pela carga (cargo ou empresa)
+    definidos,                                       // com líder, vínculo definido pelo RH
+    comLiderOutraOrigem: comLider.length - inferidos - definidos,
+    semLiderCarga: soltas.filter(a => a.origem !== 'definido').length,   // a carga não achou líder
+    semLiderRH: soltas.filter(a => a.origem === 'definido').length,      // o RH tirou o líder
     semOrganizacao: poolSemOrganizacao(S).length,
   };
 }

@@ -45,7 +45,7 @@ test('página: seletor de organização no topo, com marcador e contagem; trocar
   assert.ok(sel && !sel.hidden);
   const ops = [...sel.options].map(o => o.textContent);
   assert.ok(ops.some(t => /Golden/.test(t) && /10 pessoas/.test(t) && /sugerida pela carga/.test(t)), ops.join(' | '));
-  assert.ok(ops.some(t => /Laghetto Corporativo/.test(t) && !/sugerida/.test(t)));
+  assert.ok(!ops.some(t => /Laghetto Corporativo|Rede/.test(t)), 'R12/R21: RH da unidade não vê a estrutura corporativa (verRede)');
   assert.ok(document.querySelector('#org-empresa'));
   window.irPara('matriz');
   assert.equal(document.querySelectorAll('#m-tabela tbody tr').length, 10);

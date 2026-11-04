@@ -13,7 +13,22 @@ const pilotoDuplo = () => { const p = piloto(); p['CAMAREIRA TESTE'].avaliadores
 const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
 const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
 const correntes = (S, org) => JSON.parse(JSON.stringify(S.atuacoes)).filter(a => a.organizacaoId === org && a.situacao === 'ativa' && a.fim == null);
-const medidorEsperado = r => `${r.comSuperior} de ${r.total - r.raiz} com líder definido, ${r.semSuperior} sem líder`;
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+/** Partes do medidor calculadas direto de S.atuacoes: denominador = atuações correntes menos a raiz. */
+function partes(S, org) {
+  const l = correntes(S, org).filter(a => !a.ehRaiz);
+  const com = l.filter(a => a.superiorId);
+  const inf = com.filter(a => /^inferido_/.test(a.origem)).length, def = com.filter(a => a.origem === 'definido').length;
+  const soltas = l.filter(a => !a.superiorId);
+  return { M: l.length, N: com.length, inf, def, outra: com.length - inf - def,
+    semCarga: soltas.filter(a => a.origem !== 'definido').length, semRH: soltas.filter(a => a.origem === 'definido').length };
+}
+const medidorEsperado = p => `${p.N} de ${p.M} com líder`;
+const detalheEsperado = p => `${plural(p.def, 'definido', 'definidos')} pelo RH · ${plural(p.inf, 'inferido', 'inferidos')} pela carga`;
+const compactoEsperado = p => `${p.N} de ${p.M} com líder · ${plural(p.inf, 'inferido', 'inferidos')}`;
+const REGIONAL = "entrar({nome:'Teste Regional', cargo:'RH', papel:'rh_regional', nivel:'N5'})";
+const GG_AVALIADOR = "entrar({nome:'Gerente Geral Teste', cargo:'Gerente geral', papel:'avaliador', nivel:'N4'})";
+const temRede = sel => [...sel.options].some(o => o.value === CORP || /Rede/.test(o.textContent));
 const caixa = (document, id) => [...document.querySelectorAll('.ar-caixa')].find(c => c.dataset.atuacao === id);
 function escolher(window, document, sel, valor) {
   const el = document.querySelector(sel); el.value = valor; el.dispatchEvent(new window.Event('change'));
@@ -32,9 +47,12 @@ test('Árvore da unidade: medidor bate com resumoOrganizacao, toda atuação tem
   const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES);
   window.eval(RH); window.irPara('arvore');
   assert.equal(document.querySelector('#t-arvore').hidden, false);
-  const r = window.LGH.resumoOrganizacao(S, 'GOLDEN');
-  assert.match(document.querySelector('#ar-medidor').textContent, new RegExp(medidorEsperado(r).replace(/[()]/g, '\\$&')));
-  assert.match(document.querySelector('#ar-medidor').textContent, new RegExp(`${r.inferidos} inferid`));
+  const p = partes(S, 'GOLDEN'); const med = document.querySelector('#ar-medidor').textContent;
+  assert.ok(med.includes(medidorEsperado(p)), med);
+  assert.ok(med.includes(detalheEsperado(p)), med);
+  assert.ok(!/com líder definido/.test(med), 'título não mistura inferido com definido');
+  if (p.semCarga) assert.ok(med.includes(`${p.semCarga} da carga, sem líder`), med);
+  assert.equal(p.def + p.inf + p.outra + p.semCarga + p.semRH, p.M);
   const ids = [...document.querySelectorAll('#t-arvore .ar-caixa')].map(c => c.dataset.atuacao).sort();
   assert.deepEqual(ids, [...correntes(S, 'GOLDEN').map(a => a.id)].sort());
   const sem = document.querySelector('#ar-sem-lider');
@@ -52,8 +70,9 @@ test('Árvore: trocar de organização re-renderiza, e os dois seletores andam j
   escolher(window, document, '#ar-org', 'BRANO');
   assert.equal(S.organizacaoSelecionada, 'BRANO');
   assert.equal(document.querySelector('#org-seletor').value, 'BRANO');
-  const r = window.LGH.resumoOrganizacao(S, 'BRANO');
-  assert.match(document.querySelector('#ar-medidor').textContent, new RegExp(medidorEsperado(r)));
+  const pb = partes(S, 'BRANO'); const med = document.querySelector('#ar-medidor').textContent;
+  assert.ok(med.includes(medidorEsperado(pb)) && med.includes(detalheEsperado(pb)), med);
+  assert.ok(med.includes(`${pb.semCarga} da carga, sem líder`), med);
   assert.match(document.querySelector('#ar-arvore').textContent, /não tem raiz/);
   assert.equal(document.querySelectorAll('#t-arvore .ar-caixa').length, correntes(S, 'BRANO').length);
   assert.match(document.querySelector('#ar-cabecalho').textContent, /sem gerente geral/i);
@@ -77,9 +96,10 @@ test('visão Rede: Golden como cartão fechado na caixa do gerente geral sob o D
   const pai = cartao.closest('.ar-caixa').closest('ul').closest('li').querySelector(':scope > .ar-caixa');
   assert.equal(pai.dataset.atuacao, 'LAGHETTO CORPORATIVO|DR|1');
   assert.match(cartao.textContent, /Gerente geral: GERENTE GERAL TESTE/);
-  const rg = window.LGH.resumoOrganizacao(S, 'GOLDEN');
-  assert.match(cartao.textContent, new RegExp(medidorEsperado(rg)));
-  assert.ok(!cartao.classList.contains('ar-unidade-vermelha'));
+  const pg = partes(S, 'GOLDEN');
+  assert.ok(cartao.textContent.includes(compactoEsperado(pg)), cartao.textContent);
+  assert.ok(pg.semCarga + pg.semRH > 0);
+  assert.ok(cartao.classList.contains('ar-unidade-vermelha'), 'unidade com gente sem líder fica vermelha na Rede');
   const faixa = document.querySelector('#ar-sem-ligacao').textContent;
   assert.match(faixa, /Unidades sem ligação ao corporativo: 1/); assert.match(faixa, /BRANO/); assert.match(faixa, /raiz/);
   const pool = window.LGH.poolSemOrganizacao(S).length;
@@ -146,3 +166,46 @@ test('clique na caixa seleciona a atuação e avisa; recolher não redesenha; Se
   nome.click();
   assert.ok(caixa(document, 'GOLDEN|SUP|1').classList.contains('ar-marcada'));
 });
+
+test('visão Rede: cartão da unidade sai do vermelho quando todos têm líder', async () => {
+  const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES_CORP);
+  window.eval(ADMIN);
+  for (const a of window.LGH.semSuperior(S.atuacoes, 'GOLDEN')) assert.equal(window.LGH.definirSuperior(S, a.id, 'GOLDEN|GG|1', 'RH Teste').ok, true, a.id);
+  window.eval('reconstruirViews()');
+  window.irPara('arvore'); escolher(window, document, '#ar-org', CORP);
+  const cartao = document.querySelector('[data-unidade="GOLDEN"]');
+  assert.ok(!cartao.classList.contains('ar-unidade-vermelha'));
+  const pg = partes(S, 'GOLDEN'); assert.equal(pg.N, pg.M);
+  assert.ok(cartao.textContent.includes(compactoEsperado(pg)), cartao.textContent);
+});
+
+test('verRede (R12/R21): só RH regional e holding; recurso registrado com esses dois papéis', async () => {
+  const { window } = await carregarPagina(base(), piloto(), null, OPCOES_CORP);
+  assert.deepEqual(JSON.parse(window.eval("JSON.stringify(RECURSOS.find(r=>r.k==='verRede'))")),
+    { k: 'verRede', n: 'Ver a estrutura corporativa (visão Rede)', p: ['rh_regional', 'admin'] });
+});
+
+for (const [rotulo, login, ve] of [['admin', ADMIN, true], ['rh_regional', REGIONAL, true], ['rh_unidade', RH, false], ['avaliador que é gerente geral e tem atuação corporativa', GG_AVALIADOR, false]]) {
+  test(`opção Rede, cartões e faixa de ligação: ${rotulo} ${ve ? 'vê' : 'não vê'}`, async () => {
+    const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES_CORP);
+    window.eval(login); window.irPara('arvore');
+    assert.equal(temRede(document.querySelector('#ar-org')), ve);
+    assert.equal(temRede(document.querySelector('#org-seletor')), ve);
+    if (ve) {
+      assert.match([...document.querySelector('#org-seletor').options].find(o => o.value === CORP).textContent, /Rede \(estrutura corporativa\)/);
+      escolher(window, document, '#ar-org', CORP);
+      assert.ok(document.querySelector('[data-unidade="GOLDEN"]'));
+      assert.equal(document.querySelector('#ar-sem-ligacao').hidden, false);
+      return;
+    }
+    if (rotulo.startsWith('avaliador')) {
+      assert.ok(S.atuacoes.some(a => a.pessoaRef === 'GG' && a.organizacaoId === CORP), 'a pessoa tem atuação corporativa');
+      assert.notEqual(S.organizacaoSelecionada, CORP);
+    }
+    escolher(window, document, '#ar-org', 'GOLDEN');
+    assert.equal(document.querySelector('[data-unidade]'), null);
+    assert.equal(document.querySelector('#ar-sem-ligacao').hidden, true);
+    assert.equal(document.querySelector('#ar-cabecalho [data-ir-org]'), null, 'sem link para a Rede');
+    assert.match(document.querySelector('#ar-cabecalho').textContent, /avaliado por/);
+  });
+}

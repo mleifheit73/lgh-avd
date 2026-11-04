@@ -102,11 +102,20 @@ test('resumoOrganizacao conta sem superior, inferidos e definidos a partir das a
     assert.equal(r.semSuperior, semSuperior(S.atuacoes, org).length, org);
     assert.equal(r.comSuperior, l.filter(a => a.superiorId).length, org);
     assert.equal(r.raiz + r.comSuperior + r.semSuperior, r.total, org);
-    assert.equal(r.inferidos, l.filter(a => /^inferido_/.test(a.origem)).length, org);
-    assert.equal(r.definidos, l.filter(a => a.origem === 'definido').length, org);
+    const comLider = l.filter(a => a.superiorId);
+    const precisam = l.filter(a => !a.ehRaiz).length;
+    assert.equal(r.precisamDeLider, precisam, org);
+    assert.equal(r.inferidos, comLider.filter(a => /^inferido_/.test(a.origem)).length, org);
+    assert.equal(r.definidos, comLider.filter(a => a.origem === 'definido').length, org);
+    assert.equal(r.comLiderOutraOrigem, comLider.length - r.inferidos - r.definidos, org);
+    const soltas = l.filter(a => !a.superiorId && !a.ehRaiz);
+    assert.equal(r.semLiderCarga, soltas.filter(a => a.origem !== 'definido').length, org);
+    assert.equal(r.semLiderRH, soltas.filter(a => a.origem === 'definido').length, org);
+    assert.equal(r.definidos + r.inferidos + r.comLiderOutraOrigem + r.semLiderCarga + r.semLiderRH, r.precisamDeLider, `${org}: as partes somam o denominador`);
     assert.equal(r.pessoas, new Set(l.map(a => a.pessoaRef)).size, org);
   }
   assert.ok(resumoOrganizacao(S, 'GOLDEN').inferidos > 0);
+  assert.equal(resumoOrganizacao(S, 'GOLDEN').inferidos, correntes(S, 'GOLDEN').filter(a => a.superiorId && /^inferido_/.test(a.origem)).length, 'a raiz inferida pela empresa não conta: não tem líder');
   assert.equal(resumoOrganizacao(S, 'BRANO').raiz, 0);
 });
 

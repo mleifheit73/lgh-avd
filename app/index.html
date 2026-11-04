@@ -3139,6 +3139,24 @@ Regras:
   const nomeOrg = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
   const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
 
+  /* ---- R12/R21: a estrutura corporativa (visão Rede) é do RH regional e da holding. Ninguém mais a vê, nem quem tem
+     atuação corporativa: o seletor do topo e o da Árvore deixam de listar a corporativa para os demais papéis. ---- */
+  const rVerRede = RECURSOS.find(r=>r.k==='verRede');
+  if(rVerRede){ rVerRede.n = 'Ver a estrutura corporativa (visão Rede)'; rVerRede.p = ['rh_regional','admin']; }
+  else RECURSOS.push({k:'verRede', n:'Ver a estrutura corporativa (visão Rede)', p:['rh_regional','admin']});
+  const veRede = () => pode('verRede');
+  const organizacoesVisiveisOriginalAr = organizacoesVisiveis;
+  organizacoesVisiveis = function(estado){
+    const l = organizacoesVisiveisOriginalAr.apply(this, arguments);
+    return veRede() ? l : l.filter(o=>o.id!==CORP);
+  };
+  const pintarSeletorOrgOriginalAr = pintarSeletorOrg;
+  pintarSeletorOrg = function(){
+    pintarSeletorOrgOriginalAr.apply(this, arguments);
+    const op = [...$('#org-seletor').options].find(o=>o.value===CORP);
+    if(op) op.textContent = op.textContent.replace(nomeOrg(CORP), 'Rede (estrutura corporativa)');
+  };
+
   /* ---- aba: logo depois da Matriz ---- */
   const iMatriz = TELAS.findIndex(t=>t.id==='matriz');
   TELAS.splice(iMatriz >= 0 ? iMatriz + 1 : TELAS.length, 0, {id:'arvore', t:'Árvore', req:'verMatriz'});
@@ -3161,23 +3179,29 @@ Regras:
   document.querySelector('main').appendChild(sec);
 
   /* ---- pedaços ---- */
+  /* Denominador único: atuações correntes menos a raiz (precisamDeLider). As partes do detalhe somam esse número. */
   function medidorHtml(r, compacto){
-    const precisam = r.total - r.raiz;
-    const pct = precisam ? Math.round(100 * r.comSuperior / precisam) : 0;
-    const frase = `<b class="num">${r.comSuperior}</b> de <b class="num">${precisam}</b> com líder definido, <b class="num k">${r.semSuperior}</b> sem líder`;
-    if(compacto) return `<span>${frase}</span><div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
-    return `<p class="ar-frase" title="Contagem por atuação: a raiz não tem líder por definição e quem tem dois líderes conta duas vezes">${frase}</p>
+    const M = r.precisamDeLider;
+    const pct = M ? Math.round(100 * r.comSuperior / M) : 0;
+    const inferidos = plural(r.inferidos,'inferido','inferidos');
+    if(compacto) return `<span>${r.comSuperior} de ${M} com líder · ${inferidos}</span>${r.semSuperior?`<span class="k">${r.semSuperior} sem líder</span>`:''}<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
+    const partes = [`${plural(r.definidos,'definido','definidos')} pelo RH`, `${inferidos} pela carga`];
+    if(r.comLiderOutraOrigem) partes.push(`${r.comLiderOutraOrigem} com líder de origem não registrada`);
+    if(r.semLiderCarga) partes.push(`<span class="k">${r.semLiderCarga} da carga, sem líder</span>`);
+    if(r.semLiderRH) partes.push(`<span class="k">${r.semLiderRH} sem líder por decisão do RH</span>`);
+    return `<p class="ar-frase" title="Contagem por atuação: a raiz não entra (não tem líder por definição) e quem tem dois líderes conta duas vezes"><b class="num">${r.comSuperior}</b> de <b class="num">${M}</b> com líder</p>
       <div class="bar" role="img" aria-label="${pct}% das atuações com líder"><i style="width:${pct}%"></i></div>
-      <p class="ar-detalhe">${plural(r.pessoas,'pessoa','pessoas')} em ${plural(r.total,'atuação','atuações')}${r.raiz?', 1 delas é a raiz':''}. Origem dos vínculos: ${r.inferidos} ${r.inferidos===1?'inferido':'inferidos'} pela carga (cargo ou empresa), ${r.definidos} ${r.definidos===1?'definido':'definidos'} pelo RH.</p>`;
+      <p class="ar-detalhe ar-partes">${partes.join(' · ')}</p>
+      <p class="ar-detalhe">${plural(r.pessoas,'pessoa','pessoas')} em ${plural(r.total,'atuação','atuações')}${r.raiz?', fora a raiz da organização':''}.</p>`;
   }
   function cartaoUnidade(orgId){
     const r = LGH.resumoOrganizacao(S, orgId), l = LGH.ligacaoDaUnidade(S, orgId);
-    const vermelha = !l.raiz || !l.ligada;
+    const vermelha = !l.raiz || !l.ligada || r.semSuperior > 0;
     return `<div class="ar-unidade${vermelha?' ar-unidade-vermelha':''}" role="button" tabindex="0" data-unidade="${esc(orgId)}" title="Abrir a árvore de ${esc(nomeOrg(orgId))}">
       <b>${esc(nomeOrg(orgId))}</b><span>Gerente geral: ${l.raiz ? esc(nomePessoa(l.raiz.pessoaRef)) : '<span class="k">sem raiz</span>'}</span>${medidorHtml(r, true)}</div>`;
   }
   function cabecalhoHtml(org){
-    if(org === CORP){
+    if(org === CORP && veRede()){
       const raiz = LGH.raizDe(S, CORP);
       return `Estrutura corporativa da rede${raiz ? ` · raiz: ${esc(nomePessoa(raiz.pessoaRef))}` : ''}. As unidades aparecem fechadas dentro da caixa do gerente geral; clique para abrir.`;
     }
@@ -3187,7 +3211,7 @@ Regras:
     if(!l.raiz) return `<span class="ar-alerta">Sem ${papel.toLowerCase()} definido: a organização não tem raiz.</span>`;
     const nome = esc(nomePessoa(l.raiz.pessoaRef));
     if(!l.ligada) return `${papel}: ${nome} · <span class="ar-alerta">sem ligação ao corporativo</span>`;
-    const podeIr = LGH.organizacoesVisiveis(S).some(x=>x.id===CORP);
+    const podeIr = veRede() && organizacoesVisiveis().some(x=>x.id===CORP);
     const link = podeIr ? ` <button class="linkish" data-ir-org="${esc(CORP)}">Ver na Rede</button>` : '';
     const sup = l.superiores.length ? l.superiores.map(a=>esc(nomePessoa(a.pessoaRef))).join(' e ') : 'ninguém, é a raiz';
     return `${papel}: ${nome} · avaliado por: ${sup} (estrutura corporativa)${link}`;
@@ -3196,7 +3220,7 @@ Regras:
     const {semLigacao, motivos} = LGH.ligacoesCorporativas(S);
     const motivo = id => motivos[id] === 'sem_raiz' ? 'sem gerente geral (raiz) definido'
       : `${nomePessoa(LGH.raizDe(S, id).pessoaRef)} não tem atuação no corporativo`;
-    const visiveis = new Set(LGH.organizacoesVisiveis(S).map(o=>o.id));
+    const visiveis = new Set(organizacoesVisiveis().map(o=>o.id));
     return `<div class="ar-faixa${semLigacao.length?'':' neutra'}"><b>Unidades sem ligação ao corporativo: ${semLigacao.length}</b>
       ${semLigacao.length ? `<ul>${semLigacao.map(id=>`<li>${visiveis.has(id)?`<button data-ir-org="${esc(id)}">${esc(nomeOrg(id))}</button>`:`<b>${esc(nomeOrg(id))}</b>`} <span class="motivo">(${esc(motivo(id))})</span></li>`).join('')}</ul>` : ''}</div>`;
   }
@@ -3207,11 +3231,11 @@ Regras:
     /* seletores: espelho dos do topo (mesmas opções e mesmo valor); a corporativa aparece como Rede */
     if(typeof pintarSeletorOrg === 'function') pintarSeletorOrg();
     const top = $('#org-seletor'), topEmp = $('#org-empresa');
-    $('#ar-org').innerHTML = [...top.options].map(o=>`<option value="${esc(o.value)}"${o.value===org?' selected':''}>${o.value===CORP?'Rede (estrutura corporativa)':esc(o.textContent)}</option>`).join('');
+    $('#ar-org').innerHTML = [...top.options].map(o=>`<option value="${esc(o.value)}"${o.value===org?' selected':''}>${esc(o.textContent)}</option>`).join('');
     $('#ar-empresa').innerHTML = [...topEmp.options].map(o=>`<option value="${esc(o.value)}"${o.value===topEmp.value?' selected':''}>${esc(o.textContent)}</option>`).join('');
     if(!org){ $('#ar-arvore').innerHTML = '<p class="ar-vazio">Nenhuma organização no seu escopo.</p>'; return; }
 
-    const rede = org === CORP;
+    const rede = org === CORP && veRede();
     const r = LGH.resumoOrganizacao(S, org);
     $('#ar-cabecalho').innerHTML = cabecalhoHtml(org);
     $('#ar-medidor').innerHTML = medidorHtml(r, false);
