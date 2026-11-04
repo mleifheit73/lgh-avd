@@ -11,3 +11,4 @@ export * from './adaptador.js';
 export * from './arvore-ui.js';
 export * as montagem from './modelo/montagem.js';
 export * as pendencias from './modelo/pendencias.js';
+export * as persistencia from './modelo/persistencia.js';
