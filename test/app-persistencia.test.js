@@ -215,7 +215,7 @@ test('I3: o vínculo vai inteiro: confirmar o inferido grava também o superior 
   assert.equal(r.origem, 'definido');
 });
 
-test('I3: aplicarDeltaConferido recusa delta com superior que não existe mais e não mexe nas atuações', () => {
+test('I3 e P30: superior que saiu na carga vira pendência sem derrubar a montagem; ciclo recusa a organização inteira', () => {
   const S = estado();
   const sup = idDe(S, 'SUP'), coz = idDe(S, 'COZ1');
   adicionarEmBloco(S, [coz], sup, 'RH', '2026-11-04');
@@ -223,9 +223,17 @@ test('I3: aplicarDeltaConferido recusa delta com superior que não existe mais e
   /* carga nova sem a atuação do supervisor (saiu da empresa) */
   const nova = S.atuacoesBase.filter(a => a.id !== sup && a.superiorId !== sup);
   const r = aplicarDeltaConferido(nova, parte, 'GOLDEN');
-  assert.equal(r.ok, false);
-  assert.equal(r.codigo, 'superior_inexistente');
-  assert.equal(r.atuacoes, nova, 'devolve as atuações de entrada');
+  /* P30 (04/11): o vínculo perdido não derruba a montagem inteira; a atuação volta ao vínculo da base e vira pendência */
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(r.perdidas, [coz]);
+  const c = r.atuacoes.find(a => a.id === coz);
+  assert.equal(c.superiorId, null, 'COZ1 voltou ao vínculo da base (sem superior)');
+  assert.equal(c.superiorAnterior, sup);
+  assert.equal(c.origem, nova.find(a => a.id === coz).origem, 'origem da base, não "definido" do delta');
+  /* ciclo continua recusando a organização inteira */
+  const ciclo = { versao: 2, alteradas: [{ id: coz, organizacaoId: 'GOLDEN', superiorId: sup }, { id: sup, organizacaoId: 'GOLDEN', superiorId: coz }], criadas: [], removidasIds: [] };
+  const rc = aplicarDeltaConferido(S.atuacoesBase, ciclo, 'GOLDEN');
+  assert.equal(rc.ok, false); assert.equal(rc.codigo, 'ciclo'); assert.equal(rc.atuacoes, S.atuacoesBase);
   /* com a base de antes, o mesmo delta passa */
   const ok = aplicarDeltaConferido(S.atuacoesBase, parte, 'GOLDEN');
   assert.equal(ok.ok, true); assert.equal(ok.atuacoes.find(a => a.id === coz).superiorId, sup);
@@ -501,35 +509,67 @@ test('R26: sem banco os textos do Restaurar ficam como antes', async () => {
   assert.equal(document.querySelector('#lote-msg').textContent, 'Configuração voltou ao estado da importação.');
 });
 
-test('I3: página com delta que aponta para superior inexistente: recusa a organização, avisa na faixa e não regrava o documento', async () => {
+test('P30: página com delta que aponta para líder que saiu: aplica o resto, a atuação vira pendência superior_saiu_da_carga, a faixa avisa; decisão do RH encerra', async () => {
   const s0 = await deltaSemeado();
   const doc = JSON.parse(JSON.stringify(s0.doc));
   doc.versao = 2;
   doc.alteradas = [{ id: s0.coz, organizacaoId: 'GOLDEN', superiorId: 'GOLDEN|QUEM-SAIU|1', ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' }];
+  const stub = bancoFalso({ 'montagem/GOLDEN': doc });
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  const c = S.atuacoes.find(a => a.id === s0.coz);
+  assert.equal(c.superiorId, null, 'COZ1 voltou ao vínculo da base');
+  assert.equal(c.superiorAnterior, 'GOLDEN|QUEM-SAIU|1');
+  assert.ok(S.atuacoes.some(a => a.id === s0.criadaId), 'o resto do documento entrou (a criada existe)');
+  assert.match(document.querySelector('#db-estado').textContent, /1 vínculo salvo de Golden apontava para líder que saiu na carga nova: virou pendência/);
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, undefined, 'organização não é recusada');
+  const fila = window.LGH.pendencias.filaDePendencias(S, 'GOLDEN');
+  assert.ok(fila.some(i => i.codigo === 'superior_saiu_da_carga' && i.atuacaoId === s0.coz), 'pendência na fila');
+  assert.ok(fila.some(i => i.codigo === 'sem_superior' && i.atuacaoId === s0.coz), 'e continua sem líder, que trava');
+  /* o RH define o líder de novo: a pendência encerra e o delta gravado não guarda mais o anterior */
+  window.eval(ADMIN); window.irPara('arvore');
+  const sup = idDe(S, 'SUP');
+  const r = window.LGH.montagem.adicionarEmBloco(S, [s0.coz], sup, 'RH', '2026-11-04');
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(S.atuacoes.find(a => a.id === s0.coz).superiorAnterior, undefined);
+  assert.ok(!window.LGH.pendencias.filaDePendencias(S, 'GOLDEN').some(i => i.codigo === 'superior_saiu_da_carga'));
+  assert.deepEqual(erros.map(String), []);
+});
+
+const docComCiclo = (s0) => {
+  const doc = JSON.parse(JSON.stringify(s0.doc));
+  doc.versao = 2;
+  doc.alteradas = [
+    { id: s0.coz, organizacaoId: 'GOLDEN', superiorId: s0.sup, ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' },
+    { id: s0.sup, organizacaoId: 'GOLDEN', superiorId: s0.coz, ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' },
+  ];
+  return doc;
+};
+
+test('I3: página com delta que fecha ciclo: recusa a organização, avisa na faixa e não regrava o documento', async () => {
+  const s0 = await deltaSemeado();
+  const doc = docComCiclo(s0);
   const stub = bancoFalso({ 'montagem/GOLDEN': doc });
   const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
   await tick();
   assert.equal(S.atuacoes.find(a => a.id === s0.coz).superiorId, null, 'o Golden ficou no estado da base');
   assert.ok(!S.atuacoes.some(a => a.id === s0.criadaId), 'nem a criada do documento recusado entra');
-  assert.match(document.querySelector('#db-estado').textContent, /montagem salva de Golden não pôde ser aplicada \(superior_inexistente\)/);
-  /* mudar o Golden agora não sobrescreve o documento recusado */
+  assert.match(document.querySelector('#db-estado').textContent, /montagem salva de Golden não pôde ser aplicada \(ciclo\)/);
   await adicionarDoisAoSupervisor(window, document, S);
   await tick();
   assert.deepEqual(setsMontagem(stub), [], 'documento recusado fica intacto no banco');
   assert.deepEqual(stub.docs['montagem/GOLDEN'], doc);
-  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'superior_inexistente');
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'ciclo');
   assert.deepEqual(erros.map(String), []);
 });
 
 test('I3 (reconferência): Restaurar apaga o documento da organização recusada e a gravação volta a valer para ela', async () => {
   const s0 = await deltaSemeado();
-  const doc = JSON.parse(JSON.stringify(s0.doc));
-  doc.versao = 2;
-  doc.alteradas = [{ id: s0.coz, organizacaoId: 'GOLDEN', superiorId: 'GOLDEN|QUEM-SAIU|1', ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' }];
+  const doc = docComCiclo(s0);
   const stub = bancoFalso({ 'montagem/GOLDEN': doc });
   const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
   await tick();
-  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'superior_inexistente', 'premissa: recusada');
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'ciclo', 'premissa: recusada');
   window.eval(ADMIN); window.irPara('matriz');
   const b = document.querySelector('#btn-restaurar');
   b.click(); b.click();

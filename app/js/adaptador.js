@@ -442,6 +442,7 @@ function transacao(S, organizacaoId, fn) {
 }
 function marcarDefinido(a, autor, quando) {
   a.origem = 'definido'; a.confirmadaPor = autor ?? null; a.definidaEm = quando;
+  delete a.superiorAnterior;   /* P30: o RH decidiu o vínculo de novo; a pendência superior_saiu_da_carga encerra */
 }
 
 /**

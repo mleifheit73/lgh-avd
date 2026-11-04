@@ -27,7 +27,7 @@ const por = (S, id) => S.atuacoes.find(a => a.id === id);
 
 test('todo código tem descrição e ação sugerida, e os dois grupos cobrem todos', () => {
   assert.equal(CODIGOS_CARGA.length, 10);
-  assert.equal(CODIGOS_HIERARQUIA.length, 8);
+  assert.equal(CODIGOS_HIERARQUIA.length, 9);
   for (const c of [...CODIGOS_CARGA, ...CODIGOS_HIERARQUIA]) {
     assert.ok(DESCRICOES[c]?.descricao && DESCRICOES[c]?.acaoSugerida, `falta texto para ${c}`);
     assert.doesNotMatch(DESCRICOES[c].descricao + DESCRICOES[c].acaoSugerida, /[—–]/, 'sem travessão');

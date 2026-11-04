@@ -17,13 +17,21 @@ export const CODIGOS_CARGA = [
 ];
 
 export const CODIGOS_HIERARQUIA = [
-  'sem_superior', 'superior_desligado', 'sem_organizacao', 'organizacao_sem_raiz', 'raiz_sem_ligacao_corporativa',
+  'sem_superior', 'superior_desligado', 'superior_saiu_da_carga', 'sem_organizacao', 'organizacao_sem_raiz', 'raiz_sem_ligacao_corporativa',
   'vinculo_inferido_nao_confirmado', 'avaliacao_mutua', 'vinculo_invalido',
 ];
 
+/** Nome de quem era o superior perdido: a atuação pode não existir mais, então vale o id (organizacao|pessoa|n) e, se a pessoa ainda existir na base, o nome dela. */
+function nomeDaAtuacaoPerdida(S, atuacaoId) {
+  const partes = String(atuacaoId).split('|');
+  const pessoaId = partes.length >= 3 ? partes[partes.length - 2] : null;
+  const p = pessoaId && S.pessoasPorId && typeof S.pessoasPorId.get === 'function' ? S.pessoasPorId.get(pessoaId) : null;
+  return p && p.nome ? p.nome : atuacaoId;
+}
+
 /** Ordem da fila: hierarquia primeiro, do que mais trava para o que só pede conferência; depois a carga. */
 export const ORDEM_FILA = [
-  'sem_superior', 'superior_desligado', 'sem_organizacao', 'organizacao_sem_raiz', 'raiz_sem_ligacao_corporativa',
+  'sem_superior', 'superior_desligado', 'superior_saiu_da_carga', 'sem_organizacao', 'organizacao_sem_raiz', 'raiz_sem_ligacao_corporativa',
   'avaliacao_mutua', 'vinculo_invalido', 'vinculo_inferido_nao_confirmado', ...CODIGOS_CARGA,
 ];
 
@@ -80,6 +88,10 @@ export const DESCRICOES = {
   superior_desligado: {
     descricao: 'O líder desta pessoa foi desligado; defina outro líder. Quem foi desligado não avalia, e o ciclo não pode abrir.',
     acaoSugerida: 'Na Árvore, o RH tira a pessoa da equipe do líder desligado e a adiciona à equipe do novo líder.',
+  },
+  superior_saiu_da_carga: {
+    descricao: 'O líder que o RH tinha definido para esta pessoa não veio na carga nova (saiu da empresa ou mudou de vínculo). A pessoa voltou ao vínculo da carga, ou ficou sem líder.',
+    acaoSugerida: 'Na Árvore, o RH confirma o líder atual ou escolhe outro; qualquer decisão do RH encerra esta pendência.',
   },
   sem_organizacao: {
     descricao: 'Pessoa PJ da carga que ainda não está em nenhuma organização, então fica fora de qualquer árvore.',
@@ -193,6 +205,8 @@ function hierarquiaDe(S, org) {
 
   /* regra única (precisaDeLider, adaptador.js): desligado e afastado não entram como sem líder; a Matriz e o Painel contam igual */
   for (const a of atuacoesSemLider(S, org.id)) itens.push(daAtuacao('sem_superior', a));
+  /* P30: vínculo definido pelo RH cujo superior saiu na carga nova (não trava sozinha: sem_superior já trava quando for o caso) */
+  for (const a of lista) if (a.superiorAnterior) itens.push(daAtuacao('superior_saiu_da_carga', a, { detalhe: `líder anterior: ${nomeDaAtuacaoPerdida(S, a.superiorAnterior)}` }));
   for (const a of lista) {
     const sup = a.superiorId != null ? porId.get(a.superiorId) : null;
     if (sup && precisaDeLider(S, a) && situacaoFuncional(sup) === 'Desligado') {

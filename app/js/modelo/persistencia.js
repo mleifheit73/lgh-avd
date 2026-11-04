@@ -22,7 +22,7 @@ import { validarArvore } from './atuacao.js';
  * Campo da base fora desta lista (pessoaRef, início, turno...) nunca vai em `alteradas`: depois de uma carga nova vale o da base.
  */
 export const GRUPOS_MONTAGEM = Object.freeze([
-  Object.freeze(['superiorId', 'ehRaiz', 'origem', 'metodoInferencia', 'confirmadaPor', 'definidaEm']),
+  Object.freeze(['superiorId', 'ehRaiz', 'origem', 'metodoInferencia', 'confirmadaPor', 'definidaEm', 'superiorAnterior']),
   Object.freeze(['podeLiderar']),
   Object.freeze(['situacao', 'fim', 'encerradaPor']),
   Object.freeze(['funcao']),
@@ -148,14 +148,41 @@ export function aplicarDeltaConferido(atuacoes, delta, organizacaoId) {
   const d = delta || {};
   const lista = atuacoes || [];
   const deOutra = [...(d.alteradas || []), ...(d.criadas || [])].some(a => a.organizacaoId !== organizacaoId);
-  if (deOutra) return { ok: false, atuacoes: lista, codigo: 'atuacao_de_outra_organizacao', ignoradas: [] };
+  if (deOutra) return { ok: false, atuacoes: lista, codigo: 'atuacao_de_outra_organizacao', ignoradas: [], perdidas: [] };
   const ids = new Set(lista.map(a => a.id));
   const ignoradas = (d.alteradas || []).map(a => a.id).filter(id => !ids.has(id)).sort(comparar);
   const depois = aplicarDelta(lista, d);
+  /* P30 (decisão de Marcelo, 04/11): superior que saiu na carga nova não derruba a montagem inteira. A atuação volta ao
+     vínculo da base (ou fica sem superior, se nasceu no delta), guarda `superiorAnterior` e vira pendência
+     superior_saiu_da_carga na fila. Ciclo e árvore inválida continuam recusando a organização inteira. */
+  const perdidas = desligarSuperioresPerdidos(depois, lista, organizacaoId);
   const antes = codigoArvore(lista, organizacaoId);
   const codigo = codigoLigacoes(depois, organizacaoId) || (() => { const c = codigoArvore(depois, organizacaoId); return c && c !== antes ? c : null; })();
-  if (codigo) return { ok: false, atuacoes: lista, codigo, ignoradas };
-  return { ok: true, atuacoes: depois, codigo: null, ignoradas };
+  if (codigo) return { ok: false, atuacoes: lista, codigo, ignoradas, perdidas: [] };
+  return { ok: true, atuacoes: depois, codigo: null, ignoradas, perdidas };
+}
+
+const GRUPO_VINCULO = GRUPOS_MONTAGEM[0];
+/** Atuações correntes da organização cujo superior não existe mais (ou é de outra organização): ids, em ordem. Edita `depois`. */
+function desligarSuperioresPerdidos(depois, base, organizacaoId) {
+  const porIdCorrente = new Map(depois.filter(corrente).map(a => [a.id, a]));
+  const naBase = new Map(base.map(a => [a.id, a]));
+  const perdidas = [];
+  for (const a of depois) {
+    if (a.organizacaoId !== organizacaoId || !corrente(a) || a.superiorId == null) continue;
+    const sup = porIdCorrente.get(a.superiorId);
+    if (sup && sup.organizacaoId === organizacaoId) continue;
+    const perdido = a.superiorId;
+    const b = naBase.get(a.id);
+    if (b && (b.superiorId == null || porIdCorrente.get(b.superiorId)?.organizacaoId === organizacaoId)) {
+      for (const k of GRUPO_VINCULO) { if (k in b) a[k] = b[k]; else delete a[k]; }
+    } else {
+      a.superiorId = null;
+    }
+    a.superiorAnterior = perdido;
+    perdidas.push(a.id);
+  }
+  return perdidas.sort(comparar);
 }
 
 /** Organização de um id de atuação `organizacao|pessoa|n` (a organização pode, em tese, conter `|`: só os dois últimos saem). */

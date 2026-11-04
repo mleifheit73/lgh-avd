@@ -3909,7 +3909,7 @@ Regras:
       + grupo('Hierarquia', hier) + grupo('Carga das bases', P.CODIGOS_CARGA);
   }
   const ROTULOS = {
-    sem_superior:'Sem líder', superior_desligado:'Líder desligado', sem_organizacao:'Sem organização', organizacao_sem_raiz:'Organização sem raiz',
+    sem_superior:'Sem líder', superior_desligado:'Líder desligado', superior_saiu_da_carga:'Líder saiu na carga', sem_organizacao:'Sem organização', organizacao_sem_raiz:'Organização sem raiz',
     raiz_sem_ligacao_corporativa:'Raiz sem ligação ao corporativo', vinculo_inferido_nao_confirmado:'Líder inferido, não confirmado',
     avaliacao_mutua:'Avaliação mútua', vinculo_invalido:'Vínculo inválido',
     sem_cpf:'Sem CPF', sem_cargo:'Sem cargo', sem_empresa:'Sem empresa', sem_nascimento:'Sem nascimento', inicio_futuro:'Início no futuro',
@@ -4158,7 +4158,7 @@ Regras:
     catch(e){ clearTimeout(timer); db = null; mostrar('montagem: falha ao ler o banco (' + (e && e.code || 'erro') + '), fica só em memória'); return; }
     clearTimeout(timer);
     let atuacoes = S.atuacoes, n = 0;
-    const falhas = [], semBase = [];
+    const falhas = [], semBase = [], perdidas = [];
     for(const d of (snap && snap.docs) || []){
       const x = d.data && d.data();
       if(!x || typeof x.organizacaoId !== 'string' || !Array.isArray(x.alteradas) || !Array.isArray(x.criadas)) continue;
@@ -4167,6 +4167,7 @@ Regras:
       const r = P.aplicarDeltaConferido(atuacoes, delta, x.organizacaoId);
       if(!r.ok){ recusadas[x.organizacaoId] = r.codigo; falhas.push(x.organizacaoId); docDaOrg[d.id || P.idDocMontagem(x.organizacaoId)] = x.organizacaoId; continue; }
       if(r.ignoradas.length) semBase.push([x.organizacaoId, r.ignoradas.length]);
+      if(r.perdidas && r.perdidas.length) perdidas.push([x.organizacaoId, r.perdidas.length]);
       atuacoes = r.atuacoes;
       n += delta.alteradas.length - r.ignoradas.length + delta.criadas.length + delta.removidasIds.length;
       const usados = LGH.idsUsados(S);
@@ -4184,7 +4185,8 @@ Regras:
     reconstruirViews();
     const nomeOrgPs = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
     const avisos = falhas.map(o => `montagem salva de ${nomeOrgPs(o)} não pôde ser aplicada (${recusadas[o]}); o que mudar nela agora fica só em memória`)
-      .concat(semBase.map(([o, k]) => `${plural(k, 'alteração salva', 'alterações salvas')} de ${nomeOrgPs(o)} ${k===1?'se refere':'se referem'} a atuação que a base não tem mais`));
+      .concat(semBase.map(([o, k]) => `${plural(k, 'alteração salva', 'alterações salvas')} de ${nomeOrgPs(o)} ${k===1?'se refere':'se referem'} a atuação que a base não tem mais`))
+      .concat(perdidas.map(([o, k]) => `${plural(k, 'vínculo salvo', 'vínculos salvos')} de ${nomeOrgPs(o)} ${k===1?'apontava':'apontavam'} para líder que saiu na carga nova: ${k===1?'virou':'viraram'} pendência (ver Pendências)`));
     mostrar([n ? 'montagem: ' + plural(n, 'alteração carregada', 'alterações carregadas') : 'montagem: nenhuma alteração salva', ...avisos].join(' · '));
     if(n && S.perfil && S.tela && S.tela !== 'login') irPara(S.tela);
   }
