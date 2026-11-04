@@ -4119,8 +4119,11 @@ Regras:
   function sincronizar(){
     if(!db || !pronto) return;
     const docs = documentos();
+    /* R12 na escrita: o perfil só grava documento de organização do seu escopo (RH da unidade: a sua; regional e holding: todas) */
+    const escopo = new Set((typeof LGH !== 'undefined' && LGH.organizacoesVisiveis ? LGH.organizacoesVisiveis(S) : (S.organizacoes || [])).map(o=>o.id));
     for(const org of Object.keys(docs).sort()){
       if(recusadas[org]) continue;
+      if(!escopo.has(org)) continue;
       const json = JSON.stringify(docs[org]);
       if(json === ultimo[org]) continue;
       if(!ultimo[org] && !docs[org].alteradas.length && !docs[org].criadas.length && !docs[org].removidasIds.length && !docs[org].idsUsados.length) continue;
@@ -4173,6 +4176,10 @@ Regras:
     }
     S.atuacoes = atuacoes;
     LGH.idsUsados(S);   /* R16: os ids das criadas também ficam reservados */
+    /* o que foi lido passa a ser comparado na forma em que seria gravado hoje: documento antigo (versão 1) ou igual
+       não é regravado por ninguém; só muda de versão quando a organização mudar de verdade */
+    const d0 = documentos();
+    for(const org of Object.keys(ultimo)) if(d0[org]) ultimo[org] = JSON.stringify(d0[org]);
     pronto = true;
     reconstruirViews();
     const nomeOrgPs = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
@@ -4188,8 +4195,18 @@ Regras:
   document.addEventListener('click', e=>{
     if(!(e.target instanceof Element) || !e.target.closest('#btn-restaurar') || !db || !pronto) return;
     const b = document.querySelector('#btn-restaurar'), msg = document.querySelector('#lote-msg');
-    if(S.confirmaRestaurar){ if(b) b.textContent = 'Confirmar: descartar as alterações e apagar a montagem salva no banco'; }
-    else if(msg) msg.textContent = 'Configuração voltou ao estado da importação; a montagem salva no banco foi apagada.';
+    if(S.confirmaRestaurar){ if(b) b.textContent = 'Confirmar: descartar as alterações e apagar a montagem salva no banco'; return; }
+    /* organização recusada ao carregar (I3): o documento dela é apagado aqui, que é o único caminho de resolução; depois a
+       gravação normal volta a valer para ela */
+    const escopo = new Set((LGH.organizacoesVisiveis ? LGH.organizacoesVisiveis(S) : (S.organizacoes || [])).map(o=>o.id));
+    for(const org of Object.keys(recusadas)){
+      if(!escopo.has(org)) continue;
+      const id = P.idDocMontagem(org);
+      delete recusadas[org]; delete ultimo[org];
+      fila = fila.then(async ()=>{ try{ await db.doc(COL + '/' + id).delete(); }catch(e){ console.warn('montagem: falha ao apagar ' + id, e); } });
+    }
+    sincronizar();
+    if(msg) msg.textContent = 'Configuração voltou ao estado da importação; a montagem salva no banco foi apagada.';
   });
   window.LGH_PERSISTENCIA = { sincronizar, documentos, pronto: () => pronto, versao: P.VERSAO_DELTA, recusadas: () => ({...recusadas}) };
 })();

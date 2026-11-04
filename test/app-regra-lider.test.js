@@ -188,3 +188,15 @@ test('M3: tirar a marca de líder de quem tem equipe é recusado mesmo com homô
   assert.equal(window.eval("avaliadosDe('SUP').length"), 1, 'o id resolve');
   assert.deepEqual(erros.map(String), []);
 });
+
+test('C2 (reconferência): o pool do painel de montagem segue a mesma regra; desligado e afastado não entram', () => {
+  const S = estado();
+  const sup = idDe(S, 'SUP'), coz = idDe(S, 'COZ1');
+  const antes = pool(S, 'GOLDEN').map(a => a.id);
+  assert.ok(antes.includes(sup) && antes.includes(coz), 'premissa: os dois estão no pool');
+  definirCampoPessoa(S, 'SUP', 'GOLDEN', 'situacao', 'Desligado');
+  definirCampoPessoa(S, 'COZ1', 'GOLDEN', 'situacao', 'Afastado');
+  const depois = pool(S, 'GOLDEN').map(a => a.id);
+  assert.ok(!depois.includes(sup) && !depois.includes(coz));
+  assert.deepEqual(depois.sort(), atuacoesSemLider(S, 'GOLDEN').map(a => a.id).sort(), 'pool = atuações sem líder da regra única');
+});

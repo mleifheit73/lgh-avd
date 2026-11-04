@@ -289,6 +289,7 @@ test('dados reais: 50 operações no Golden, round-trip e documento do Golden ab
 
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN' };
 const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
+const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
 const tick = (ms = 60) => new Promise(r => setTimeout(r, ms));
 const caixa = (document, id) => [...document.querySelectorAll('#ar-arvore .ar-caixa, #ar-sem-lider .ar-caixa')].find(c => c.dataset.atuacao === id);
 const checks = document => [...document.querySelectorAll('#ar-pool input[type=checkbox][data-pool]')];
@@ -517,5 +518,43 @@ test('I3: página com delta que aponta para superior inexistente: recusa a organ
   assert.deepEqual(setsMontagem(stub), [], 'documento recusado fica intacto no banco');
   assert.deepEqual(stub.docs['montagem/GOLDEN'], doc);
   assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'superior_inexistente');
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('I3 (reconferência): Restaurar apaga o documento da organização recusada e a gravação volta a valer para ela', async () => {
+  const s0 = await deltaSemeado();
+  const doc = JSON.parse(JSON.stringify(s0.doc));
+  doc.versao = 2;
+  doc.alteradas = [{ id: s0.coz, organizacaoId: 'GOLDEN', superiorId: 'GOLDEN|QUEM-SAIU|1', ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' }];
+  const stub = bancoFalso({ 'montagem/GOLDEN': doc });
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'superior_inexistente', 'premissa: recusada');
+  window.eval(ADMIN); window.irPara('matriz');
+  const b = document.querySelector('#btn-restaurar');
+  b.click(); b.click();
+  await tick();
+  assert.ok(!('montagem/GOLDEN' in stub.docs) || setsMontagem(stub).length > 0, 'documento recusado apagado (ou regravado vazio)');
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, undefined, 'organização deixou de estar recusada');
+  await adicionarDoisAoSupervisor(window, document, S);
+  await tick();
+  const g = setsMontagem(stub);
+  assert.ok(g.length >= 1 && g[g.length - 1].d.alteradas.length >= 2, 'a mudança seguinte é gravada');
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('I1 (reconferência): documento antigo (versão 1) de outra organização não é regravado por quem muda só a sua; RH da unidade nunca grava fora do escopo', async () => {
+  const s0 = await deltaSemeado();
+  const docV1 = { organizacaoId: 'BRANO', versao: 1, alteradas: [], criadas: [], removidasIds: [], idsUsados: ['BRANO|X|9'] };
+  const stub = bancoFalso({ 'montagem/BRANO': docV1 });
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  window.eval(RH);
+  await adicionarDoisAoSupervisor(window, document, S);
+  await tick();
+  const g = setsMontagem(stub);
+  assert.ok(g.length >= 1);
+  assert.ok(g.every(x => x.caminho === 'montagem/GOLDEN'), 'só o Golden foi gravado: ' + g.map(x => x.caminho).join(','));
+  assert.deepEqual(stub.docs['montagem/BRANO'], docV1, 'documento da Brano intacto');
   assert.deepEqual(erros.map(String), []);
 });

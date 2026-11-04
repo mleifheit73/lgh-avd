@@ -12,7 +12,7 @@ import { filaDePendencias, TRAVAM_CICLO } from './pendencias.js';
 import {
   ehCorrente, nomeExibicao, vinculoDaAtuacao, SEM_SETOR, definirSuperior, removerSuperior,
   marcarLider as marcarLiderAdaptador, confirmarInferido as confirmarInferidoAdaptador,
-  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao, criarRaizNaOrganizacao, temMarcaDeLider,
+  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao, criarRaizNaOrganizacao, temMarcaDeLider, semLider,
 } from '../adaptador.js';
 
 const hoje = () => new Date().toISOString().slice(0, 10);
@@ -45,13 +45,13 @@ function casaFiltro(S, a, filtro, nome) {
 }
 
 /**
- * Pool da organização: atuações correntes sem superior que não são a raiz, filtradas.
+ * Pool da organização: atuações que precisam de líder e ainda não têm (semLider do adaptador, regra única), filtradas.
  * filtro.texto: sem acento, contido no nome de exibição ou na função. filtro.cargo: igual à função ou ao cargo do vínculo.
  * filtro.setor: igual ao setor (null conta como 'Sem setor'). Ordem: nome, depois id. Devolve array novo.
  */
 export function pool(S, organizacaoId, filtro = {}) {
   return (S.atuacoes || [])
-    .filter(a => a.organizacaoId === organizacaoId && ehCorrente(a) && a.superiorId == null && !a.ehRaiz)
+    .filter(a => a.organizacaoId === organizacaoId && semLider(S, a))   /* regra única (C2): desligado e afastado não precisam de líder */
     .map(a => ({ a, nome: nomeDe(S, a.pessoaRef) }))
     .filter(({ a, nome }) => casaFiltro(S, a, filtro, nome))
     .sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR') || comparar(x.a.id, y.a.id))
