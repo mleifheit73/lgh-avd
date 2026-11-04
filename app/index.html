@@ -1322,9 +1322,14 @@ function pintarMatriz(){
   });
   document.querySelectorAll('[data-si]').forEach(s=>s.onchange=()=>{
     const p=pessoaDe(s.dataset.si);
-    mudar(`situação de ${p.nome}`, ()=>{ LGH.definirCampoPessoa(S, p.id, org, 'situacao', s.value);
-      if(s.value==='Desligado') LGH.limparSuperiores(S, p.id, org, autorAtual()); });
+    /* M4: atômico. Desligado tira o superior primeiro; se o adaptador recusar, a situação também não muda */
+    const r = tentarMudar(`situação de ${p.nome}`, ()=>{
+      if(s.value==='Desligado'){ const l = LGH.limparSuperiores(S, p.id, org, autorAtual()); if(!l || l.ok === false) return l || {ok:false, codigo:'erro'}; }
+      LGH.definirCampoPessoa(S, p.id, org, 'situacao', s.value);
+      return {ok:true};
+    });
     pintarMatriz();
+    if(!r.ok) $('#lote-msg').textContent = `Não foi possível mudar a situação de ${p.nome} para ${s.value}: ${avisoErro(r.erro)}.`;
   });
   document.querySelectorAll('[data-st]').forEach(s=>s.onchange=()=>{
     const p=pessoaDe(s.dataset.st);

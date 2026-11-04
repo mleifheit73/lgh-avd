@@ -133,3 +133,23 @@ test('marcarLider no adaptador não mexe na regra: a raiz nunca precisa de líde
   marcarLider(S, gg, false);
   assert.equal(precisaDeLider(S, S.atuacoes.find(a => a.id === gg)), false);
 });
+
+test('M4: Desligado é atômico; se limparSuperiores recusar, a situação não muda e a tela diz por quê', async () => {
+  const { window, document, S, erros } = await carregarPagina(lerFixture('base-mini.json'), lerFixture('piloto-mini.json'), null, OPCOES);
+  window.eval(ADMIN);
+  window.eval("trocarOrganizacao('GOLDEN')");
+  window.irPara('matriz');
+  const cam = S.atuacoes.find(a => a.id === 'GOLDEN|CAM|1');
+  const sup = cam.superiorId;
+  const passos = window.eval('HIST.length');
+  /* recusa simulada do adaptador: o resto do LGH continua o de verdade */
+  window.LGH = Object.assign({}, window.LGH, { limparSuperiores: () => ({ ok: false, codigo: 'recusa_teste', mensagem: 'recusa simulada' }) });
+  const sel = document.querySelector('[data-si="CAM"]');
+  sel.value = 'Desligado'; sel.dispatchEvent(new window.Event('change'));
+  assert.equal(cam.situacaoColab ?? 'Ativo', 'Ativo', 'situação não mudou');
+  assert.equal(cam.superiorId, sup, 'superior continua');
+  assert.equal(window.eval('HIST.length'), passos, 'recusa não deixa passo vazio no Desfazer');
+  assert.match(document.querySelector('#lote-msg').textContent, /Não foi possível mudar a situação de .* para Desligado: recusa simulada/);
+  assert.equal(document.querySelector('[data-si="CAM"]').value, 'Ativo', 'a tela volta a mostrar a situação real');
+  assert.deepEqual(erros.map(String), []);
+});
