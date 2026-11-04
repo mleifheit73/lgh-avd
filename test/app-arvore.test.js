@@ -209,3 +209,28 @@ for (const [rotulo, login, ve] of [['admin', ADMIN, true], ['rh_regional', REGIO
     assert.match(document.querySelector('#ar-cabecalho').textContent, /avaliado por/);
   });
 }
+
+test('P28: avaliador vê na Árvore só a própria subárvore (as atuações dele e quem está abaixo), sem medidor nem Sem líder da organização', async () => {
+  const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval("entrar({nome:'Supervisor de Governança Teste', cargo:'x', papel:'avaliador', nivel:'N1'})"); window.irPara('arvore');
+  const sup = S.atuacoes.find(a => a.pessoaRef === 'SUP' && a.organizacaoId === 'GOLDEN' && a.situacao === 'ativa' && a.fim == null).id;
+  const esperado = new Set([sup]);
+  const filhosDe = id => S.atuacoes.filter(a => a.superiorId === id && a.situacao === 'ativa' && a.fim == null).map(a => a.id);
+  for (const fila = [sup]; fila.length;) { const id = fila.shift(); for (const f of filhosDe(id)) { esperado.add(f); fila.push(f); } }
+  const ids = [...document.querySelectorAll('#t-arvore .ar-caixa')].map(c => c.dataset.atuacao).sort();
+  assert.deepEqual(ids, [...esperado].sort(), 'só a subárvore do avaliador');
+  assert.ok(ids.length < correntes(S, 'GOLDEN').length, 'premissa: a organização tem mais gente que a subárvore');
+  assert.equal(document.querySelector('#ar-sem-lider').hidden, true);
+  assert.match(document.querySelector('#ar-medidor').textContent, /sua equipe/i);
+  /* RH da unidade continua vendo tudo */
+  window.eval(RH); window.irPara('arvore');
+  assert.equal(document.querySelectorAll('#t-arvore .ar-caixa').length, correntes(S, 'GOLDEN').length);
+});
+
+test('P28: o contador de pendências da organização não aparece para o avaliador', async () => {
+  const { window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval("entrar({nome:'Supervisor de Governança Teste', cargo:'x', papel:'avaliador', nivel:'N1'})"); window.irPara('arvore');
+  assert.equal(document.querySelector('#ar-pendencias').textContent.trim(), '');
+  window.eval(RH); window.irPara('arvore');
+  assert.match(document.querySelector('#ar-pendencias').textContent, /pendência/);
+});

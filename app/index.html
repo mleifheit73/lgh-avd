@@ -3269,6 +3269,9 @@ Regras:
     $('#ar-empresa').innerHTML = [...topEmp.options].map(o=>`<option value="${esc(o.value)}"${o.value===topEmp.value?' selected':''}>${esc(o.textContent)}</option>`).join('');
     if(!org){ $('#ar-arvore').innerHTML = '<p class="ar-vazio">Nenhuma organização no seu escopo.</p>'; return; }
 
+    /* P28 (decisão de Marcelo, 04/11): avaliador vê só a própria subárvore. Bloco separado; o resto da função é o caminho do RH. */
+    if(S.perfil && S.perfil.papel === 'avaliador'){ renderSubarvoreDoAvaliador(org); return; }
+
     const rede = org === CORP && veRede();
     const r = LGH.resumoOrganizacao(S, org);
     $('#ar-cabecalho').innerHTML = cabecalhoHtml(org);
@@ -3304,6 +3307,29 @@ Regras:
       <div class="card"><div class="ar-arvore">${foraComEquipe.map(n=>LGH.renderArvore(n, {...opcoes, profundidadeAberta: 1})).join('')}</div></div>` : '');
     /* subárvores soltas nascem recolhidas (só a cabeça, com "Expandir"): na base real são dezenas, e abertas a tela passava de 18 mil px */
 
+    $('#ar-legenda').innerHTML = 'Origem do vínculo: ' + LGH.LEGENDA_ORIGEM.map(l=>`<span><span class="tag ${l.classe}">${esc(l.curto)}</span>${esc(l.texto)}</span>`).join('');
+    if(S.arSelecionada){ const c = caixaPorId(S.arSelecionada); if(c) c.classList.add('ar-ativa'); }
+  }
+  /* P28: as atuações correntes do avaliador na organização, cada uma com quem está abaixo (mesma forma de nó de LGH.arvore).
+     Nada da organização fora dessas subárvores entra na tela: nem medidor, nem Sem líder, nem pendências. */
+  function renderSubarvoreDoAvaliador(org){
+    const pid = LGH.pessoaDoPerfil(S);
+    const correntes = (S.atuacoes||[]).filter(a=>a.organizacaoId===org && a.situacao==='ativa' && a.fim==null);
+    const filhosDe = new Map();
+    for(const a of correntes){ if(a.superiorId==null) continue; if(!filhosDe.has(a.superiorId)) filhosDe.set(a.superiorId, []); filhosDe.get(a.superiorId).push(a); }
+    const vistos = new Set();
+    const montar = a => { vistos.add(a.id); return { atuacao: a, filhos: (filhosDe.get(a.id)||[]).filter(f=>!vistos.has(f.id)).map(montar) }; };
+    const minhas = correntes.filter(a=>a.pessoaRef===pid).sort((x,y)=>x.id<y.id?-1:x.id>y.id?1:0);
+    const nos = minhas.map(montar);
+    const total = vistos.size - minhas.length;
+    $('#ar-cabecalho').innerHTML = cabecalhoHtml(org);   /* gerente geral e, se houver, por quem ele é avaliado; sem link para a Rede (veRede é falso) */
+    $('#ar-medidor').innerHTML = `<p class="ar-frase">${minhas.length ? `Sua equipe em ${esc(nomeOrganizacao())}: ${plural(total,'pessoa','pessoas')}, direta ou abaixo dela` : 'Você não tem atuação nesta organização'}</p>
+      <p class="ar-detalhe">Esta visão mostra só a sua equipe. A árvore inteira da organização é do RH.</p>`;
+    $('#ar-pendencias').innerHTML = '';
+    for(const id of ['#ar-sem-ligacao','#ar-pool','#ar-sem-lider']){ const el = $(id); if(el){ el.hidden = true; el.innerHTML = ''; } }
+    $('#ar-titulo-arvore').textContent = 'Sua equipe';
+    const opcoes = {profundidadeAberta: 1, pessoas: S.pessoasPorId, destacarSemSuperior: false, nome: nomePessoa};
+    $('#ar-arvore').innerHTML = nos.length ? nos.map(n=>LGH.renderArvore(n, opcoes)).join('') : '<p class="ar-vazio">Nenhuma atuação sua nesta organização.</p>';
     $('#ar-legenda').innerHTML = 'Origem do vínculo: ' + LGH.LEGENDA_ORIGEM.map(l=>`<span><span class="tag ${l.classe}">${esc(l.curto)}</span>${esc(l.texto)}</span>`).join('');
     if(S.arSelecionada){ const c = caixaPorId(S.arSelecionada); if(c) c.classList.add('ar-ativa'); }
   }
@@ -3991,6 +4017,8 @@ Regras:
   function contador(){
     const org = S.organizacaoSelecionada;
     if(!org){ cont.innerHTML = ''; return; }
+    /* P28: o avaliador vê só a própria subárvore; o contador da organização inteira é do RH */
+    if(!pode('verPainelRH')){ cont.innerHTML = ''; delete cont.dataset.total; return; }
     const r = P.resumoFila(S, org);
     const link = pode('verPainelRH') ? ` <button type="button" class="linkish" id="ar-ver-pendencias">Ver pendências</button>` : '';
     cont.innerHTML = r.total === 0 ? 'Nenhuma pendência nesta organização.'
