@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { lerFixture } from './helpers/pagina.js';
+import { lerFixture, carregarPagina } from './helpers/pagina.js';
 import { montarEstado } from './helpers/estado.js';
 import { reconstruirViews, definirSuperior, removerSuperior, confirmarInferido, marcarLider, criarAtuacaoNaOrganizacao, ehCorrente } from '../app/js/adaptador.js';
 import { adicionarEmBloco } from '../app/js/modelo/montagem.js';
@@ -200,4 +200,165 @@ test('dados reais: 50 operações no Golden, round-trip e documento do Golden ab
   assert.ok(aplicadas > 0);
   assert.ok(bytes < 100 * 1024, `documento do Golden com ${bytes} bytes`);
   assert.equal(chavesProibidas.test(JSON.stringify(doc)), false);
+});
+
+/* ================= página no jsdom, com banco falso ================= */
+
+const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN' };
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const tick = (ms = 60) => new Promise(r => setTimeout(r, ms));
+const caixa = (document, id) => [...document.querySelectorAll('#ar-arvore .ar-caixa, #ar-sem-lider .ar-caixa')].find(c => c.dataset.atuacao === id);
+const checks = document => [...document.querySelectorAll('#ar-pool input[type=checkbox][data-pool]')];
+
+/** Banco do artefato em memória: docs por caminho 'colecao/id'; registra cada set com o estado do boot naquele momento. */
+function bancoFalso(docs = {}, { atrasarBoot = 0 } = {}) {
+  const sets = [], leituras = [];
+  const stub = {
+    sets, leituras, docs,
+    use: async (n) => {
+      if (n !== 'db') return null;
+      if (atrasarBoot && stub.janela) {   /* o banco responde antes do boot: os fetches seguintes do boot demoram */
+        const f = stub.janela.fetch;
+        stub.janela.fetch = (...a) => new Promise(r => setTimeout(r, atrasarBoot)).then(() => f(...a));
+      }
+      const pronto = () => !!(stub.janela && stub.janela.S && stub.janela.S.pronto);
+      const ref = (caminho) => ({
+        get: async () => ({ exists: caminho in docs, data: () => JSON.parse(JSON.stringify(docs[caminho])) }),
+        set: async (d) => { const c = JSON.parse(JSON.stringify(d)); sets.push({ caminho, d: c, bootPronto: pronto() }); docs[caminho] = c; },
+        update: async (d) => { docs[caminho] = { ...(docs[caminho] || {}), ...d }; },
+        delete: async () => { delete docs[caminho]; },
+      });
+      return {
+        doc: ref,
+        collection: (nome) => ({
+          doc: (id) => ref(nome + '/' + id),
+          get: async () => {
+            leituras.push({ nome, bootPronto: pronto() });
+            return { docs: Object.keys(docs).filter(k => k.startsWith(nome + '/')).sort().map(k => ({ id: k.slice(nome.length + 1), exists: true, data: () => JSON.parse(JSON.stringify(docs[k])) })) };
+          },
+        }),
+      };
+    },
+  };
+  return stub;
+}
+const setsMontagem = stub => stub.sets.filter(s => s.caminho.startsWith('montagem/'));
+
+async function adicionarDoisAoSupervisor(window, document, S) {
+  window.eval(RH); window.irPara('arvore');
+  const sup = S.atuacoes.find(a => a.pessoaRef === 'SUP' && a.organizacaoId === 'GOLDEN').id;
+  caixa(document, sup).click();
+  const disp = checks(document).filter(c => c.dataset.pool !== sup);
+  disp[0].click(); disp[1].click();
+  const escolhidos = [disp[0].dataset.pool, disp[1].dataset.pool];
+  document.querySelector('#ar-adicionar').click();
+  return { sup, escolhidos };
+}
+
+test('página sem banco: a faixa avisa e a montagem continua funcionando em memória', async () => {
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), null, OPCOES);
+  await tick();
+  const faixa = document.querySelector('#db-estado');
+  assert.equal(faixa.hidden, false);
+  assert.match(faixa.textContent, /Sem persistência nesta visualização/);
+  assert.ok(!/montagem/.test(faixa.textContent), 'sem banco, nada sobre montagem na faixa');
+  const { sup, escolhidos } = await adicionarDoisAoSupervisor(window, document, S);
+  for (const id of escolhidos) assert.equal(S.atuacoes.find(a => a.id === id).superiorId, sup);
+  assert.ok(Array.isArray(S.atuacoesBase) && S.atuacoesBase.length === S.atuacoes.length);
+  assert.ok(S.atuacoesBase.every(a => !escolhidos.includes(a.id) || a.superiorId !== sup), 'a base não acompanha a mudança');
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('página com banco vazio: montar grava um documento por organização; desfazer grava o delta vazio', async () => {
+  const stub = bancoFalso();
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  assert.match(document.querySelector('#db-estado').textContent, /montagem: nenhuma alteração salva/);
+  assert.deepEqual(setsMontagem(stub), [], 'carregar não grava');
+  const { escolhidos } = await adicionarDoisAoSupervisor(window, document, S);
+  await tick();
+  const g = setsMontagem(stub);
+  assert.equal(g.length, 1, JSON.stringify(g.map(x => x.caminho)));
+  assert.equal(g[0].caminho, 'montagem/GOLDEN');
+  assert.equal(g[0].d.organizacaoId, 'GOLDEN'); assert.equal(g[0].d.versao, 1);
+  assert.deepEqual(g[0].d.alteradas.map(a => a.id), [...escolhidos].sort());
+  assert.deepEqual(g[0].d.criadas, []); assert.deepEqual(g[0].d.removidasIds, []);
+  assert.equal(g[0].d.autor, 'Teste RH'); assert.match(g[0].d.quando, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(chavesProibidas.test(JSON.stringify(g[0].d)), false, 'sem nome, cargo nem hash');
+  assert.equal(g[0].bootPronto, true);
+  window.desfazer();
+  await tick();
+  const g2 = setsMontagem(stub);
+  assert.equal(g2.length, 2);
+  assert.equal(g2[1].caminho, 'montagem/GOLDEN');
+  assert.deepEqual([g2[1].d.alteradas, g2[1].d.criadas, g2[1].d.removidasIds], [[], [], []]);
+  window.desfazer();   /* nada mais a desfazer: nada muda, nada grava */
+  await tick();
+  assert.equal(setsMontagem(stub).length, 2);
+  assert.deepEqual(erros.map(String), []);
+});
+
+/** Delta do Golden montado na própria página (sem banco): COZ1 sob o supervisor e uma segunda atuação da camareira sob o GG. */
+async function deltaSemeado() {
+  const { window, S } = await carregarPagina(base(), piloto(), null, OPCOES);
+  const sup = S.atuacoes.find(a => a.pessoaRef === 'SUP' && a.organizacaoId === 'GOLDEN').id;
+  const gg = S.atuacoes.find(a => a.pessoaRef === 'GG' && a.organizacaoId === 'GOLDEN').id;
+  const coz = S.atuacoes.find(a => a.pessoaRef === 'COZ1' && a.organizacaoId === 'GOLDEN').id;
+  const cam = S.atuacoes.find(a => a.pessoaRef === 'CAM' && a.organizacaoId === 'GOLDEN').id;
+  assert.equal(window.LGH.definirSuperior(S, coz, sup, 'RH SEMENTE', '2026-11-01').ok, true);
+  const r = window.LGH.definirSuperior(S, cam, gg, 'RH SEMENTE', '2026-11-01');
+  assert.equal(r.acao, 'criada');
+  const d = window.LGH.persistencia.calcularDelta(S.atuacoesBase, S.atuacoes);
+  const criadaId = r.atuacao.id;
+  const desfeitoId = criadaId.replace(/\|(\d+)$/, (m, n) => '|' + (Number(n) + 1));   /* id usado e desfeito noutra sessão */
+  const doc = JSON.parse(JSON.stringify({ organizacaoId: 'GOLDEN', ...d, idsUsados: [criadaId, desfeitoId], autor: 'RH SEMENTE', quando: '2026-11-01T12:00:00.000Z' }));
+  return { doc, coz, sup, cam, gg, criadaId, desfeitoId };
+}
+
+test('página com banco semeado: o delta do Golden vale depois do boot e os ids usados não se repetem', async () => {
+  const s = await deltaSemeado();
+  const stub = bancoFalso({ 'montagem/GOLDEN': s.doc });
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  assert.equal(S.atuacoes.find(a => a.id === s.coz).superiorId, s.sup);
+  const criada = S.atuacoes.find(a => a.id === s.criadaId);
+  assert.ok(criada && criada.superiorId === s.gg);
+  assert.ok(!S.atuacoesBase.some(a => a.id === s.criadaId), 'a base continua sem o delta');
+  assert.ok(S.idsUsados.has(s.criadaId) && S.idsUsados.has(s.desfeitoId));
+  assert.match(document.querySelector('#db-estado').textContent, /montagem: 2 alterações carregadas/);
+  window.eval(RH); window.irPara('arvore');
+  assert.ok(caixa(document, s.criadaId), 'a árvore mostra a segunda atuação da camareira');
+  const equipeSup = window.LGH.avaliadosDe(S, 'SUP', 'GOLDEN').map(x => x.id);
+  assert.ok(equipeSup.includes(s.coz), 'o cozinheiro está na equipe do supervisor');
+  assert.equal(caixa(document, s.sup).dataset.subordinados, String(equipeSup.length), 'a caixa do supervisor conta a equipe com o cozinheiro');
+  assert.deepEqual(setsMontagem(stub), [], 'carregar não regrava');
+  /* uma nova segunda atuação da camareira não reaproveita id usado */
+  const rec = S.atuacoes.find(a => a.pessoaRef === 'REC1' && a.organizacaoId === 'GOLDEN').id;
+  window.eval(`tentarMudar('rec líder', ()=>LGH.marcarLider(S, ${JSON.stringify(rec)}, true))`);
+  const r = window.eval(`tentarMudar('cam sob rec', ()=>LGH.definirSuperior(S, ${JSON.stringify(s.cam)}, ${JSON.stringify(rec)}, 'Teste RH'))`);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const nova = r.valor.atuacao.id;
+  assert.ok(![s.cam, s.criadaId, s.desfeitoId].includes(nova), nova);
+  await tick();
+  const g = setsMontagem(stub);
+  assert.ok(g.length >= 1);
+  const ultimo = g[g.length - 1].d;
+  assert.ok(ultimo.criadas.some(a => a.id === nova) && ultimo.criadas.some(a => a.id === s.criadaId));
+  assert.ok([s.criadaId, s.desfeitoId, nova].every(id => ultimo.idsUsados.includes(id)), 'idsUsados acumula');
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('corrida banco x boot: o banco responde antes do boot e o delta ainda vale depois de lgh-boot-pronto', async () => {
+  const s = await deltaSemeado();
+  const stub = bancoFalso({ 'montagem/GOLDEN': s.doc }, { atrasarBoot: 150 });
+  const { S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick(100);
+  const lAval = stub.leituras.find(l => l.nome === 'avaliacoes');
+  assert.ok(lAval && lAval.bootPronto === false, 'premissa: o banco respondeu antes do boot terminar');
+  const lMont = stub.leituras.find(l => l.nome === 'montagem');
+  assert.ok(lMont && lMont.bootPronto === true, 'a montagem só é lida depois do boot');
+  assert.equal(S.atuacoes.find(a => a.id === s.coz).superiorId, s.sup);
+  assert.ok(S.atuacoes.some(a => a.id === s.criadaId));
+  assert.deepEqual(setsMontagem(stub), [], 'nada gravado por cima');
+  assert.deepEqual(erros.map(String), []);
 });

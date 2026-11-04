@@ -2073,6 +2073,8 @@ async function boot(){
   S.semOrganizacao = carga.semOrganizacao;
   S.logCarga = carga.log;
   for(const e of cfg.atuacoesExtras || []) S.atuacoes.push({origem:'definido', metodoInferencia:null, confirmadaPor:null, podeLiderar:false, ...e});
+  /* Tarefa 8: a base da montagem (carga + extras da configuração, iguais a cada abertura). O banco guarda só o delta sobre ela. */
+  S.atuacoesBase = JSON.parse(JSON.stringify(S.atuacoes));
   /* R16: todo id de atuação já visto (carga e chaves de avaliação) fica reservado; o banco acrescenta os seus ao carregar */
   const usados = LGH.idsUsados(S);
   Object.keys(ENVIADAS).forEach(k=>usados.add(k.slice(0, k.lastIndexOf('|'))));
@@ -3950,6 +3952,111 @@ Regras:
     irPara('pendencias');
   });
   window.LGH_TRAVA = { aplicar: aplicarTrava };
+})();
+</script>
+
+<!-- ===== BLOCO PERSISTENCIA (Plano B, Tarefa 8, 04/11/2026): a montagem (superiores, raiz, marca de líder, confirmações e
+     atuações novas) persiste como DELTA sobre a base no banco do artefato, um documento por organização.
+     Bloco independente: remover este <style> e este <script> devolve a montagem só em memória (como até a Tarefa 7).
+     Regra do banco (a Tarefa 9 publica): { path: 'montagem', read: 'view', write: 'admin' }: todo mundo que abre lê,
+     só Editor e dono gravam.
+     Documento montagem/<idDocMontagem(organizacaoId)>: { organizacaoId, versao, alteradas, criadas, removidasIds, idsUsados,
+     autor, quando }. Nunca recebe a base, nome, cargo da base nem hash: só atuações (ids, função e estrutura).
+     Concorrência: a última gravação vence, sem mesclagem. Duas pessoas montando a mesma organização ao mesmo tempo:
+     vale o documento de quem gravou por último. ===== -->
+<style id="bloco-persistencia-css">
+#db-estado-montagem:empty{display:none}
+#db-estado-montagem{color:var(--muted)}
+</style>
+<script id="bloco-persistencia">
+(function(){
+  if(typeof LGH === 'undefined' || !LGH.persistencia || typeof tentarMudar !== 'function' || typeof mudar !== 'function') return;
+  const P = LGH.persistencia, COL = 'montagem';
+  /* a faixa é do bloco-db: aqui só um pedaço de texto ao lado do dele, que ele nunca reescreve */
+  const faixa = document.querySelector('#db-estado');
+  let rotulo = document.querySelector('#db-estado-montagem');
+  if(faixa && !rotulo){ rotulo = document.createElement('span'); rotulo.id = 'db-estado-montagem'; faixa.appendChild(rotulo); }
+  const mostrar = msg => { if(rotulo) rotulo.textContent = msg ? '· ' + msg : ''; };
+  const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
+
+  let db = null, pronto = false, ausente = false, fila = Promise.resolve();
+  const ultimo = {};        /* organizacaoId -> JSON do que está no banco (lido ou gravado) */
+  const docDaOrg = {};      /* idDoc -> organizacaoId: duas organizações no mesmo documento são recusadas */
+
+  /* ---- delta por organização, com os ids já usados (R16) que a base não recria sozinha ---- */
+  function documentos(){
+    const base = S.atuacoesBase || [];
+    const naBase = new Set(base.map(a=>a.id));
+    const partes = P.deltaPorOrganizacao(P.calcularDelta(base, S.atuacoes || []), base);
+    const usados = {};
+    for(const id of S.idsUsados || []){ if(naBase.has(id)) continue; const o = P.organizacaoDoId(id); if(o != null) (usados[o] ||= []).push(id); }
+    const orgs = new Set([...Object.keys(partes), ...Object.keys(usados), ...Object.keys(ultimo)]);
+    const r = {};
+    for(const org of orgs){
+      const d = partes[org] || {versao:1, alteradas:[], criadas:[], removidasIds:[]};
+      r[org] = {organizacaoId: org, versao: d.versao, alteradas: d.alteradas, criadas: d.criadas, removidasIds: d.removidasIds, idsUsados: (usados[org] || []).sort()};
+    }
+    return r;
+  }
+  function sincronizar(){
+    if(!db || !pronto) return;
+    const docs = documentos();
+    for(const org of Object.keys(docs).sort()){
+      const json = JSON.stringify(docs[org]);
+      if(json === ultimo[org]) continue;
+      if(!ultimo[org] && !docs[org].alteradas.length && !docs[org].criadas.length && !docs[org].removidasIds.length && !docs[org].idsUsados.length) continue;
+      const id = P.idDocMontagem(org);
+      if(docDaOrg[id] && docDaOrg[id] !== org){ console.warn('montagem: ' + org + ' e ' + docDaOrg[id] + ' cairiam no mesmo documento ' + id); mostrar('montagem: não foi possível salvar ' + org + ' (documento em conflito)'); continue; }
+      docDaOrg[id] = org;
+      ultimo[org] = json;   /* marca já: a próxima mudança compara com isto, e a fila grava em ordem */
+      fila = fila.then(async ()=>{
+        try{ await db.doc(COL + '/' + id).set({...JSON.parse(json), autor: (S.perfil && S.perfil.nome) || null, quando: new Date().toISOString()}); mostrar('montagem salva no banco'); }
+        catch(e){ if(ultimo[org] === json) delete ultimo[org]; mostrar('montagem: falha ao salvar (' + (e && e.code || 'erro') + '), fica só em memória'); }
+      });
+    }
+  }
+
+  /* ---- gancho: toda mudança de atuação passa por mudar(); tentarMudar desfaz a recusa depois, então grava ao sair dele ---- */
+  let dentro = 0;
+  const tentarMudarOriginalPs = tentarMudar;
+  tentarMudar = function(){ dentro++; try{ return tentarMudarOriginalPs.apply(this, arguments); } finally { dentro--; if(!dentro) sincronizar(); } };
+  const mudarOriginalPs = mudar;
+  mudar = function(){ try{ return mudarOriginalPs.apply(this, arguments); } finally { if(!dentro) sincronizar(); } };
+  const desfazerOriginalPs = desfazer;
+  desfazer = function(){ const r = desfazerOriginalPs.apply(this, arguments); sincronizar(); return r; };
+
+  /* ---- carga: uma leitura da coleção depois do boot (o banco pode responder antes do fetch da base) ---- */
+  const timer = setTimeout(()=>{ if(!pronto && !ausente && !(faixa && faixa.dataset.st === 'erro')) mostrar('montagem: banco ainda não respondeu'); }, 10000);
+  document.addEventListener('lgh-db-ausente', ()=>{ ausente = true; clearTimeout(timer); mostrar(''); });
+  async function carregar(){
+    if(pronto || !window.LGH_DB) return;
+    db = window.LGH_DB;
+    let snap;
+    try{ snap = await db.collection(COL).get(); }
+    catch(e){ clearTimeout(timer); db = null; mostrar('montagem: falha ao ler o banco (' + (e && e.code || 'erro') + '), fica só em memória'); return; }
+    clearTimeout(timer);
+    let atuacoes = S.atuacoes, n = 0;
+    for(const d of (snap && snap.docs) || []){
+      const x = d.data && d.data();
+      if(!x || typeof x.organizacaoId !== 'string' || !Array.isArray(x.alteradas) || !Array.isArray(x.criadas)) continue;
+      const delta = {versao: x.versao || 1, alteradas: x.alteradas, criadas: x.criadas, removidasIds: Array.isArray(x.removidasIds) ? x.removidasIds : []};
+      atuacoes = P.aplicarDelta(atuacoes, delta);
+      n += delta.alteradas.length + delta.criadas.length + delta.removidasIds.length;
+      const usados = LGH.idsUsados(S);
+      for(const id of Array.isArray(x.idsUsados) ? x.idsUsados : []) usados.add(id);
+      docDaOrg[d.id || P.idDocMontagem(x.organizacaoId)] = x.organizacaoId;
+      ultimo[x.organizacaoId] = JSON.stringify({organizacaoId: x.organizacaoId, versao: delta.versao, alteradas: delta.alteradas, criadas: delta.criadas, removidasIds: delta.removidasIds, idsUsados: Array.isArray(x.idsUsados) ? x.idsUsados : []});
+    }
+    S.atuacoes = atuacoes;
+    LGH.idsUsados(S);   /* R16: os ids das criadas também ficam reservados */
+    pronto = true;
+    reconstruirViews();
+    mostrar(n ? 'montagem: ' + plural(n, 'alteração carregada', 'alterações carregadas') : 'montagem: nenhuma alteração salva');
+    if(n && S.perfil && S.tela && S.tela !== 'login') irPara(S.tela);
+  }
+  document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar));
+  if(window.LGH_DB) aposBoot(carregar);
+  window.LGH_PERSISTENCIA = { sincronizar, documentos };
 })();
 </script>
 
