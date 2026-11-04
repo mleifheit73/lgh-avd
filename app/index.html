@@ -2421,7 +2421,9 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
       const d = snap.data(); if(!d || !Array.isArray(d.lideres) || !Array.isArray(d.usuarios)) return;
       /* lideresAtuacoes (Plano B) manda; sem ela, a lista de pessoas vale para todas as atuações correntes da pessoa */
       const porAtuacao = Array.isArray(d.lideresAtuacoes) ? new Set(d.lideresAtuacoes) : null, porPessoa = new Set(d.lideres);
-      (S.atuacoes||[]).forEach(a => { if(a.situacao==='ativa' && a.fim==null) a.podeLiderar = porAtuacao ? porAtuacao.has(a.id) : porPessoa.has(a.pessoaRef); });
+      /* R25: com o bloco-persistencia presente, a marca de líder vem só do delta da montagem; daqui saem só as contas */
+      if(!window.LGH_PERSISTENCIA)
+        (S.atuacoes||[]).forEach(a => { if(a.situacao==='ativa' && a.fim==null) a.podeLiderar = porAtuacao ? porAtuacao.has(a.id) : porPessoa.has(a.pessoaRef); });
       reconstruirViews();
       USUARIOS.splice(0, USUARIOS.length, ...d.usuarios);
       ultimoJson = JSON.stringify(d.lideresAtuacoes ? { lideres: d.lideres, lideresAtuacoes: d.lideresAtuacoes, usuarios: d.usuarios, atualizadoEm: d.atualizadoEm } : { lideres: d.lideres, usuarios: d.usuarios, atualizadoEm: d.atualizadoEm });
@@ -4056,7 +4058,15 @@ Regras:
   }
   document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar));
   if(window.LGH_DB) aposBoot(carregar);
-  window.LGH_PERSISTENCIA = { sincronizar, documentos };
+  /* R26: "Restaurar configuração inicial" (Matriz) volta à base e, com o banco ativo, grava deltas vazios: os textos dizem isso.
+     Ouvinte no document, na fase de bolha: roda depois do onclick original do botão, sem mexer nele. */
+  document.addEventListener('click', e=>{
+    if(!(e.target instanceof Element) || !e.target.closest('#btn-restaurar') || !db || !pronto) return;
+    const b = document.querySelector('#btn-restaurar'), msg = document.querySelector('#lote-msg');
+    if(S.confirmaRestaurar){ if(b) b.textContent = 'Confirmar: descartar as alterações e apagar a montagem salva no banco'; }
+    else if(msg) msg.textContent = 'Configuração voltou ao estado da importação; a montagem salva no banco foi apagada.';
+  });
+  window.LGH_PERSISTENCIA = { sincronizar, documentos, pronto: () => pronto, versao: 1 };
 })();
 </script>
 

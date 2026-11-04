@@ -149,7 +149,7 @@ function bancoFalso(docs) {
         set: async (d) => { sets.push({ caminho, d, bootPronto: !!(stub.janela && stub.janela.S && stub.janela.S.pronto) }); },
         delete: async () => {},
       });
-      return { doc: ref, collection: (nome) => ({ get: async () => ({ docs: [] }), doc: (id) => ref(nome + '/' + id) }) };
+      return { doc: ref, collection: (nome) => ({ get: async () => ({ docs: Object.keys(docs).filter((k) => k.startsWith(nome + '/')).map((k) => ({ id: k.slice(nome.length + 1), exists: true, data: () => docs[k] })) }), doc: (id) => ref(nome + '/' + id) }) };
     },
   };
   return stub;
@@ -157,14 +157,21 @@ function bancoFalso(docs) {
 const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 
 test('corrida banco x boot: líder salvo no banco é aplicado após o boot e nada vazio é regravado antes', async () => {
-  const docs = { 'config/lideres-e-contas': { lideres: ['CAM'], usuarios: [{ nome: 'USUARIO SINTETICO', cargo: 'x', cpf: '', email: '', papel: 'avaliador', nivel: 'N1', escopo: 'x', ativo: true }], atualizadoEm: '2026-11-03T00:00:00.000Z' } };
+  /* R25 (Tarefa 8): a marca de líder vem do delta da montagem; config/lideres-e-contas só traz as contas */
+  const semBanco = await carregarPagina(lerFixture('base-mini.json'), {}, null, OPCOES_GOLDEN);
+  const camBase = semBanco.S.atuacoes.find((a) => a.pessoaRef === 'CAM' && a.organizacaoId === 'GOLDEN');
+  const docs = {
+    'config/lideres-e-contas': { lideres: ['CAM'], usuarios: [{ nome: 'USUARIO SINTETICO', cargo: 'x', cpf: '', email: '', papel: 'avaliador', nivel: 'N1', escopo: 'x', ativo: true }], atualizadoEm: '2026-11-03T00:00:00.000Z' },
+    'montagem/GOLDEN': { organizacaoId: 'GOLDEN', versao: 1, alteradas: [{ ...camBase, podeLiderar: true }], criadas: [], removidasIds: [], idsUsados: [], autor: 'RH', quando: '2026-11-03T00:00:00.000Z' },
+  };
   const stub = bancoFalso(docs);
   const { window, S } = await carregarPagina(lerFixture('base-mini.json'), {}, stub, OPCOES_GOLDEN);
   await tick();
   assert.equal(S.pronto, true);
   const visao = window.eval('PESSOAS');
   assert.equal(visao.find((p) => p.id === 'CAM').lider, true);
-  assert.equal(visao.filter((p) => p.lider).length, 1);
+  const lideresBase = [...semBanco.window.eval('PESSOAS').filter((p) => p.lider).map((p) => p.id)];
+  assert.deepEqual([...visao.filter((p) => p.lider).map((p) => p.id)].sort(), [...new Set([...lideresBase, 'CAM'])].sort(), 'líderes da base mais o CAM do delta');
   assert.equal(window.eval('USUARIOS').some((u) => u.nome === 'USUARIO SINTETICO'), true);
   const gravacoes = stub.sets.filter((s) => s.caminho === 'config/lideres-e-contas');
   for (const g of gravacoes) {

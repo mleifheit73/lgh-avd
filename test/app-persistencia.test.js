@@ -211,7 +211,7 @@ const caixa = (document, id) => [...document.querySelectorAll('#ar-arvore .ar-ca
 const checks = document => [...document.querySelectorAll('#ar-pool input[type=checkbox][data-pool]')];
 
 /** Banco do artefato em memória: docs por caminho 'colecao/id'; registra cada set com o estado do boot naquele momento. */
-function bancoFalso(docs = {}, { atrasarBoot = 0 } = {}) {
+function bancoFalso(docs = {}, { atrasarBoot = 0, atrasoLeitura = {} } = {}) {
   const sets = [], leituras = [];
   const stub = {
     sets, leituras, docs,
@@ -223,7 +223,10 @@ function bancoFalso(docs = {}, { atrasarBoot = 0 } = {}) {
       }
       const pronto = () => !!(stub.janela && stub.janela.S && stub.janela.S.pronto);
       const ref = (caminho) => ({
-        get: async () => ({ exists: caminho in docs, data: () => JSON.parse(JSON.stringify(docs[caminho])) }),
+        get: async () => {
+          if (atrasoLeitura[caminho]) await new Promise(r => setTimeout(r, atrasoLeitura[caminho]));
+          return { exists: caminho in docs, data: () => JSON.parse(JSON.stringify(docs[caminho])) };
+        },
         set: async (d) => { const c = JSON.parse(JSON.stringify(d)); sets.push({ caminho, d: c, bootPronto: pronto() }); docs[caminho] = c; },
         update: async (d) => { docs[caminho] = { ...(docs[caminho] || {}), ...d }; },
         delete: async () => { delete docs[caminho]; },
@@ -361,4 +364,55 @@ test('corrida banco x boot: o banco responde antes do boot e o delta ainda vale 
   assert.ok(S.atuacoes.some(a => a.id === s.criadaId));
   assert.deepEqual(setsMontagem(stub), [], 'nada gravado por cima');
   assert.deepEqual(erros.map(String), []);
+});
+
+/* ================= correções da revisão (R25, R26) ================= */
+
+test('R25: com delta de montagem, podeLiderar segue o delta e não config/lideres-e-contas (contas continuam vindo de lá)', async () => {
+  const s = await deltaSemeado();
+  const cam = s.doc.criadas.find(a => a.id === s.criadaId);
+  assert.equal(cam.podeLiderar, false, 'premissa: no delta a camareira não é líder');
+  const camBase = { ...(await carregarPagina(base(), piloto(), null, OPCOES)).S.atuacoes.find(a => a.id === s.cam), podeLiderar: false };
+  const doc = { ...s.doc, alteradas: [...s.doc.alteradas, camBase].sort((x, y) => (x.id < y.id ? -1 : 1)) };
+  const stub = bancoFalso({
+    'montagem/GOLDEN': doc,
+    'config/lideres-e-contas': { lideres: ['CAM'], lideresAtuacoes: [s.cam, s.criadaId], usuarios: [{ nome: 'USUARIO SINTETICO', cargo: 'x', cpf: '', email: '', papel: 'avaliador', nivel: 'N1', escopo: 'x', ativo: true }], atualizadoEm: '2026-11-03T00:00:00.000Z' },
+  }, { atrasoLeitura: { 'config/lideres-e-contas': 60 } });   /* o config chega depois do delta: sem R25 ele venceria */
+  const { window, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick(150);
+  const camAtuais = S.atuacoes.filter(a => a.pessoaRef === 'CAM' && a.organizacaoId === 'GOLDEN');
+  assert.ok(camAtuais.length >= 2);
+  assert.ok(camAtuais.every(a => a.podeLiderar === false), JSON.stringify(camAtuais.map(a => [a.id, a.podeLiderar])));
+  assert.equal(window.eval('USUARIOS').some(u => u.nome === 'USUARIO SINTETICO'), true, 'as contas ainda vêm do config');
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('R26: Restaurar configuração inicial avisa que apaga a montagem salva e grava os deltas vazios', async () => {
+  const stub = bancoFalso();
+  const { window, document, S } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  await adicionarDoisAoSupervisor(window, document, S);
+  await tick();
+  assert.equal(setsMontagem(stub).length, 1);
+  window.irPara('matriz');
+  const b = document.querySelector('#btn-restaurar');
+  b.click();
+  assert.equal(b.textContent, 'Confirmar: descartar as alterações e apagar a montagem salva no banco');
+  b.click();
+  assert.equal(document.querySelector('#lote-msg').textContent, 'Configuração voltou ao estado da importação; a montagem salva no banco foi apagada.');
+  await tick();
+  const g = setsMontagem(stub);
+  assert.equal(g.length, 2);
+  assert.deepEqual([g[1].d.alteradas, g[1].d.criadas, g[1].d.removidasIds], [[], [], []]);
+});
+
+test('R26: sem banco os textos do Restaurar ficam como antes', async () => {
+  const { window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
+  await tick();
+  window.eval(RH); window.irPara('matriz');
+  const b = document.querySelector('#btn-restaurar');
+  b.click();
+  assert.equal(b.textContent, 'Confirmar: descartar todas as alterações');
+  b.click();
+  assert.equal(document.querySelector('#lote-msg').textContent, 'Configuração voltou ao estado da importação.');
 });
