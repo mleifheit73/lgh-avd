@@ -12,7 +12,7 @@ import { filaDePendencias, TRAVAM_CICLO } from './pendencias.js';
 import {
   ehCorrente, nomeExibicao, vinculoDaAtuacao, SEM_SETOR, definirSuperior, removerSuperior,
   marcarLider as marcarLiderAdaptador, confirmarInferido as confirmarInferidoAdaptador,
-  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao, criarRaizNaOrganizacao,
+  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao, criarRaizNaOrganizacao, temMarcaDeLider,
 } from '../adaptador.js';
 
 const hoje = () => new Date().toISOString().slice(0, 10);
@@ -71,7 +71,7 @@ function conferirSuperior(S, ids, superiorAtuacaoId) {
   const sup = atuacaoPorId(S, superiorAtuacaoId);
   if (!sup || !ehCorrente(sup)) return { ok: false, codigo: 'atuacao_inexistente', aplicados: [], recusados: [] };
   if (ids.includes(superiorAtuacaoId)) return { ok: false, codigo: 'proprio_superior', aplicados: [], recusados: [] };
-  if (sup.podeLiderar === false) return { ok: false, codigo: 'superior_sem_marca_de_lider', aplicados: [], recusados: [] };
+  if (!temMarcaDeLider(sup)) return { ok: false, codigo: 'superior_sem_marca_de_lider', aplicados: [], recusados: [] };
   return null;
 }
 
@@ -177,7 +177,7 @@ export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = ho
   if (sup.organizacaoId !== ID_CORPORATIVO) return { ok: false, codigo: 'superior_fora_da_organizacao', aplicados: [], recusados: [] };
   const porChave = new Map(poolRede(S).map(i => [i.chave, i]));
   if (lista.some(c => porChave.get(c)?.pessoaId === sup.pessoaRef)) return { ok: false, codigo: 'proprio_superior', aplicados: [], recusados: [] };
-  if (sup.podeLiderar === false) return { ok: false, codigo: 'superior_sem_marca_de_lider', aplicados: [], recusados: [] };
+  if (!temMarcaDeLider(sup)) return { ok: false, codigo: 'superior_sem_marca_de_lider', aplicados: [], recusados: [] };
   const aplicados = [], recusados = [];
   for (const chave of lista) {
     const item = porChave.get(chave);

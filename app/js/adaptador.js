@@ -421,7 +421,7 @@ function marcarDefinido(a, autor, quando) {
  * Sem superior: passa a ter. Já tem outro: nasce uma segunda atuação da pessoa com este superior (D14).
  * Já tem este mesmo superior em alguma atuação: nada muda.
  * Recusa: raiz, a própria pessoa, outra organização, ciclo, avaliação mútua entre pessoas (R15) e superior sem marca de líder
- * (R20: podeLiderar === false; a Matriz já só oferece líderes, e a carga não passa por aqui).
+ * (R20: podeLiderar precisa ser true, ver exigirLider; a Matriz já só oferece líderes, e a carga não passa por aqui).
  * Devolve { ok: true, acao: 'definido' | 'criada' | 'nenhuma', atuacao } ou { ok: false, codigo, mensagem }.
  */
 export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando = hoje()) {
@@ -494,9 +494,15 @@ function encerrar(S, a, destino, autor, quando) {
   a.fim = quando; a.situacao = 'encerrada'; a.encerradaPor = autor ?? null;
 }
 
-/** R20: só atuação marcada como líder recebe subordinado. Ausente (undefined) não recusa: só a marca explícita false. */
-function exigirLider(sup) {
-  if (sup.podeLiderar === false) throw new ErroAdaptador('superior_sem_marca_de_lider', `${sup.id} não está marcado como líder`, { superiorId: sup.id });
+/**
+ * R20 (M2, revisão final do Plano B): só lidera quem tem a marca de líder estritamente verdadeira (podeLiderar === true).
+ * Ausente (undefined, null) conta como sem marca: nenhuma escrita deixa atuação sem o campo (carga, bootstrap e adaptador
+ * gravam booleano), então a ausência só pode ser dado incompleto, e dado incompleto não autoriza ninguém a avaliar.
+ * Regra única: definirSuperior, definirUnicoSuperior, criarAtuacaoNaOrganizacao e montagem.js (adicionarEmBloco, adicionarNaRede) usam esta.
+ */
+export const temMarcaDeLider = a => !!a && a.podeLiderar === true;
+export function exigirLider(sup) {
+  if (!temMarcaDeLider(sup)) throw new ErroAdaptador('superior_sem_marca_de_lider', `${sup && sup.id} não está marcado como líder`, { superiorId: sup && sup.id });
 }
 
 /**
@@ -627,7 +633,7 @@ export function definirUnicoSuperior(S, pessoaId, organizacaoId, superiorAtuacao
     if (!minhas.length) throw new ErroAdaptador('pessoa_fora_da_organizacao', `${pessoaId} não tem atuação corrente em ${organizacaoId}`, { pessoaId });
     const sup = exigir(S, superiorAtuacaoId, 'Superior');
     if (sup.organizacaoId !== organizacaoId) throw new ErroAdaptador('superior_fora_da_organizacao', `O superior ${sup.id} é de outra organização`, { pessoaId });
-    if (!sup.podeLiderar) throw new ErroAdaptador('superior_sem_marca_de_lider', `${sup.id} não está marcado como líder`, { pessoaId });
+    exigirLider(sup);
     if (minhas.some(a => a.ehRaiz)) throw new ErroAdaptador('raiz_com_superior', `${pessoaId} é raiz de ${organizacaoId}`, { pessoaId });
     if (sup.pessoaRef === pessoaId) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia', { pessoaId });
     if (estaAcima(S, organizacaoId, pessoaId, sup.pessoaRef)) throw new ErroAdaptador('avaliacao_mutua', 'Avaliação mútua: esta pessoa já está acima do superior escolhido', { pessoaId });

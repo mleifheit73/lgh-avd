@@ -153,3 +153,22 @@ test('M4: Desligado é atômico; se limparSuperiores recusar, a situação não 
   assert.equal(document.querySelector('[data-si="CAM"]').value, 'Ativo', 'a tela volta a mostrar a situação real');
   assert.deepEqual(erros.map(String), []);
 });
+
+test('M2: marca de líder precisa ser estritamente true; ausente é recusada em todas as escritas', async () => {
+  const ad = await import('../app/js/adaptador.js');
+  const mo = await import('../app/js/modelo/montagem.js');
+  assert.equal(ad.temMarcaDeLider({ podeLiderar: true }), true);
+  for (const v of [undefined, null, false, 1, 'sim']) assert.equal(ad.temMarcaDeLider({ podeLiderar: v }), false, String(v));
+  const S = estado();
+  const sup = S.atuacoes.find(a => a.id === idDe(S, 'SUP'));
+  delete sup.podeLiderar;
+  const coz = idDe(S, 'COZ1');
+  assert.equal(ad.definirSuperior(S, coz, sup.id, 'RH').codigo, 'superior_sem_marca_de_lider');
+  assert.equal(ad.definirUnicoSuperior(S, 'COZ1', 'GOLDEN', sup.id, 'RH').codigo, 'superior_sem_marca_de_lider');
+  assert.equal(ad.criarAtuacaoNaOrganizacao(S, { pessoaId: 'GAR1', organizacaoId: 'GOLDEN', superiorAtuacaoId: sup.id, funcao: 'X', autor: 'RH' }).codigo, 'superior_sem_marca_de_lider');
+  assert.equal(mo.adicionarEmBloco(S, [coz], sup.id, 'RH').codigo, 'superior_sem_marca_de_lider');
+  const dr = S.atuacoes.find(a => a.id === idDe(S, 'DR', 'LAGHETTO CORPORATIVO'));
+  delete dr.podeLiderar;
+  assert.equal(mo.adicionarNaRede(S, ['p:PJ-SEM-ORG'], dr.id, 'RH').codigo, 'superior_sem_marca_de_lider');
+  assert.equal(S.atuacoes.find(a => a.id === coz).superiorId, null, 'nada mudou');
+});
