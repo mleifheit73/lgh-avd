@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Levar o protótipo navegável (versão 26) a rodar sobre a base real consolidada pelo Plano A, com CLT e PJ juntos, e entregar as três telas da Fundação que o RH ainda não viu: a árvore de cada organização, o painel de montagem da hierarquia e a fila de pendências, mais a trava que impede abrir ciclo com gente sem avaliador.
+**Goal:** Levar o protótipo navegável (versão 32, de 03/11 à noite) a rodar sobre a base real consolidada pelo Plano A, com CLT e PJ juntos, e entregar as três telas da Fundação que o RH ainda não viu: a árvore de cada organização, o painel de montagem da hierarquia e a fila de pendências, mais a trava que impede abrir ciclo com gente sem avaliador.
 
 **Architecture:** O protótipo deixa de ser um arquivo único com dados cravados e vira um artefato de vários arquivos: `app/index.html` (telas), `app/js/` (os módulos do Plano A copiados sem alteração, mais os módulos novos de organização, montagem e adaptação), `app/data/base.json` (gerado, sem CPF, com hash). As telas antigas continuam existindo e passam a ler atuações em vez do array `PESSOAS`. Vínculos de liderança inferidos (por cargo, do protótipo de outubro; por empresa contratante, para PJ) entram rotulados como inferência e visíveis como tal em toda tela, para o RH confirmar ou substituir. Nenhuma função de regra toca DOM; a página é renderização fina sobre módulos testáveis em Node. O que o RH monta na tela persiste no banco do artefato (capacidade `db`) como delta sobre a base gerada: a base é a origem, o banco guarda só o que o RH mudou, e sem banco a página avisa e segue em memória. A publicação sai como **artefato novo**, em URL própria; a versão 26 continua no ar até Marcelo aprovar a troca. A publicação é ação fora do repositório e é uma parada obrigatória.
 
@@ -19,7 +19,9 @@
 - **Fonte única e delta.** `base.json` é a origem dos dados. O banco do artefato guarda apenas as alterações do RH (`delta`), por organização. A página aplica `base + delta` ao carregar. Nunca gravar a base inteira no banco, nunca cravar dado no HTML.
 - **Mesmo sal de hash** da versão 26: `SALT = "lgh-avd-2026::"` (linha 639 do HTML). Sem isso o login por CPF de Marcelo e Christine quebra.
 - **Regra estrutural fixa:** cada superior diferente gera uma atuação; uma atuação tem um superior; uma raiz por organização, marcada com `ehRaiz`; sem ciclos. Usar `validarArvore` do Plano A sem reescrever.
-- **O protótipo versão 26 é intocado até a aprovação deste plano** e até a reunião de 04/11 passar. A primeira tarefa só o copia.
+- **O baseline é a versão 32** do protótipo (publicada em 03/11 às 23h), que já traz: histórico por colaborador, filtro por status, visão por ciclo, persistência das avaliações no banco do artefato (bloco DB), turno fora do modelo (D16), marca de líder com conta automática (bloco LID, D17), formulários versionados (bloco FORM, D18) e Evolução só com dado real (D19). A primeira tarefa só a copia. Os blocos DB, LID, FORM e AV2 do fim do arquivo são mantidos e passam a ler as atuações pelo adaptador.
+- **Turno não existe** (D16): nenhum campo, filtro ou texto de turno em lugar nenhum. Equipe é o setor.
+- **Estrutura corporativa** (D20): a organização `LAGHETTO CORPORATIVO` (tipo `corporativa`, origem `definida`) é criada vazia na Tarefa 2 e montada só pelo RH da holding. Nenhuma inferência de diretor ou CEO: o pool da visão Rede mostra os PJ sem organização para o N6 montar.
 - **Os módulos do Plano A não são alterados** neste plano. Bug neles é tarefa nova no Plano A, não remendo aqui.
 - Visual mantém o sistema da versão 26: mesmos tokens de cor, mesmos dois temas, mesma tipografia. Tela nova parece a mesma plataforma. O implementador das Tarefas 5 e 6 carrega o skill `frontend-design` antes de escrever a tela.
 - Sem travessão em nenhum texto.
@@ -83,7 +85,7 @@ Decisões de estrutura:
   - `PessoaPublica = { id: string (hash curto, 12 hex do SHA-256 do CPF com sal; ou idProvisorio), nome, status, motivoStatus, cpfHash: string|null (SHA-256 completo com sal, para login), faixaEtaria: 'até 24'|'25 a 34'|'35 a 44'|'45 a 54'|'55 ou mais'|null (calculada no build com a data de geração), nomesAlternativos }`. **Sem cpf, sem nascimento, sem idade exata.**
   - `app/data/inferencias-v26.json`: `{ [nomePessoa]: string[] }` extraído do `PESSOAS[].avaliadores` da versão 26 no Step 1, antes de remover o array. Gitignored (tem nomes).
   - `test/helpers/pagina.js`: `carregarPagina(baseJson): Promise<{ window, document, S }>`: monta `app/index.html` no jsdom, injeta a base no lugar do `fetch`, espera o boot.
-  - `test/fixtures/base-mini.json`: 3 filiais CLT (`GOLDEN A&B` e `GOLDEN RESORT`, fundidas em `GOLDEN` pela fixture de fusões do teste, e `BRANO`), 11 pessoas no Golden e 4 na Brano, 1 pessoa nas duas (`ANA`), 1 camareira com dois superiores (`CAM`), 1 pessoa com CLT e PJ na mesma filial (`DUPLO-VINCULO`), 1 PJ cuja empresa é igual a uma filial (`GG`, gerente geral) e 1 PJ sem casamento (`PJ-SEM-ORG`), 3 pendências (`sem_cpf`, `possivel_duplicado`, `inicio_futuro`), hashes sintéticos, CPFs no padrão `000.000.000-0N` só no gerador da fixture, nunca na fixture.
+  - `test/fixtures/base-mini.json`: 3 filiais CLT (`GOLDEN A&B` e `GOLDEN RESORT`, fundidas em `GOLDEN` pela fixture de fusões do teste, e `BRANO`), 11 pessoas no Golden e 4 na Brano, 1 pessoa nas duas (`ANA`), 1 camareira com dois superiores (`CAM`), 1 pessoa com CLT e PJ na mesma filial (`DUPLO-VINCULO`), 1 PJ cuja empresa é igual a uma filial (`GG`, gerente geral) e 1 PJ sem casamento (`PJ-SEM-ORG`), 3 pendências (`sem_cpf`, `possivel_duplicado`, `inicio_futuro`), mais a estrutura corporativa montada: `CEO-REDE` raiz, `DR` diretor regional abaixo, e `GG` (gerente geral do Golden) com segunda atuação sob `DR`; hashes sintéticos, CPFs no padrão `000.000.000-0N` só no gerador da fixture, nunca na fixture.
 
 - [ ] **Step 1: Copiar a versão 26 e commitar como baseline, sem alteração**
 
@@ -153,8 +155,8 @@ git add -A && git commit -m "feat(app): build do artefato com base pública sem 
 
 **Interfaces:**
 - Produces:
-  - `criarOrganizacao({ id, nome, tipo: 'unidade'|'area'|'empresa', regional?: string|null, situacao?: 'ativa' }): Organizacao`
-  - `organizacoesDe(base, fusoes = FUSOES): Organizacao[]`: uma por filial CLT distinta (tipo `unidade`, regional do vínculo, `id = chaveEmpresa(filial)`, `origem: 'sugerida_pela_carga'`), exceto as filiais listadas em `fusoes`, que viram uma organização só. `FUSOES` tem uma entrada, a que o piloto de outubro já tratava como um hotel: `{ id: 'HOTEL LAGHETTO GOLDEN', nome: 'Hotel Laghetto Golden', filiais: ['LAGHETTO FL 18 A&B GOLDEN', 'LAGHETTO RESORT GOLDEN'] }`. **P8 continua aberta:** áreas administrativas e empresas distintas não são criadas aqui, e toda organização sugerida aparece com esse rótulo até o RH confirmar; PJ sem organização correspondente ficam no pool "sem organização".
+  - `criarOrganizacao({ id, nome, tipo: 'unidade'|'area'|'empresa'|'corporativa', regional?: string|null, situacao?: 'ativa', origem?: 'sugerida_pela_carga'|'definida' }): Organizacao`
+  - `organizacoesDe(base, fusoes = FUSOES): Organizacao[]`: uma por filial CLT distinta (tipo `unidade`, regional do vínculo, `id = chaveEmpresa(filial)`, `origem: 'sugerida_pela_carga'`), exceto as filiais listadas em `fusoes`, que viram uma organização só, **mais** `{ id: 'LAGHETTO CORPORATIVO', nome: 'Laghetto Corporativo', tipo: 'corporativa', origem: 'definida' }`, sempre, vazia (D20). `FUSOES` tem uma entrada, a que o piloto de outubro já tratava como um hotel: `{ id: 'HOTEL LAGHETTO GOLDEN', nome: 'Hotel Laghetto Golden', filiais: ['LAGHETTO FL 18 A&B GOLDEN', 'LAGHETTO RESORT GOLDEN'] }`. **P8 continua aberta:** áreas administrativas e empresas distintas não são criadas aqui, e toda organização sugerida aparece com esse rótulo até o RH confirmar; PJ sem organização correspondente ficam no pool "sem organização".
   - `inferirOrganizacao(empresaNormalizada, organizacoes, equivalencias): { organizacaoId: string, metodo: 'nome'|'prefixo'|'numero'|'tabela' } | null`, em `organizacao.js`. Ordem: (1) `nome`: igual ao `id` ou a uma das filiais fundidas; (2) `prefixo`: um é prefixo do outro com pelo menos 20 caracteres, porque o Domínio trunca a razão social (`CONDOMINIO DO EDIFICIO COMERCIAL ATHIVAB`); (3) `numero`: mesmo número de filial, extraído por `/\b(?:FL|FILIAL|FLIAL)\s*0*(\d+)\b/`; (4) `tabela`: `equivalencia-organizacoes.json`, versionado, com `{ empresa, organizacaoId, motivo }`, começando com `GOLDEN GRAMADO RESORT LAGHETTO → HOTEL LAGHETTO GOLDEN` (é a pagadora do gerente geral sênior, do gerente de hospedagem e da governanta executiva do Golden). Nada casa → `null`. Medido em 03/11 sobre a base real: 240 vínculos PJ, 9 casam por nome, 71 por número, cerca de 24 por prefixo, 9 pela tabela; os cerca de 127 restantes são de `LAGHETTO HOTEIS` (57) e `LAGHETTO ADMINISTRADORA DE HOTEIS` (46) e outras sem filial própria, e vão para o pool. **Esse número aparece na tela** ("127 PJ sem organização, para o RH distribuir").
   - `atuacoesIniciais(base, organizacoes, inferenciasDaV26: { [nomePessoa]: string[] }): { atuacoes: Atuacao[], semOrganizacao: PessoaPublica[], log }`
     - Uma atuação por vínculo CLT, na organização da filial, `superiorId: null`, `funcao: cargo`, `origem: 'carga'`.
@@ -176,6 +178,11 @@ test('atuacoesIniciais: CLT na organização da filial, sem superior, origem car
   const { atuacoes } = atuacoesIniciais(b, organizacoesDe(b), {});
   const a = atuacoes.find(x => x.pessoaRef === 'CAM1');
   assert.equal(a.organizacaoId, 'GOLDEN'); assert.equal(a.superiorId, null); assert.equal(a.origem, 'carga');
+});
+test('organizacoesDe inclui a estrutura corporativa vazia, tipo corporativa', () => {
+  const o = organizacoesDe(lerFixture('base-mini.json'));
+  const c = o.find(x => x.id === 'LAGHETTO CORPORATIVO');
+  assert.equal(c.tipo, 'corporativa'); assert.equal(c.origem, 'definida');
 });
 test('organizacoesDe funde as filiais listadas em fusoes numa organização só', () => {
   const o = organizacoesDe(lerFixture('base-mini.json'), [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOLDEN RESORT'] }]);
@@ -208,7 +215,7 @@ test('base real: ao menos 100 vínculos PJ recebem organização e o restante é
   const { atuacoes, semOrganizacao } = atuacoesIniciais(baseReal, organizacoesDe(baseReal), {});
   assert.ok(atuacoes.filter(a => a.origem === 'inferido_por_empresa').length >= 100);
   assert.ok(semOrganizacao.length >= 100 && semOrganizacao.length <= 140);
-  assert.equal(organizacoesDe(baseReal).length, 36);
+  assert.equal(organizacoesDe(baseReal).length, 37, '36 unidades mais a corporativa');
 });
 test('atuacoesIniciais: vínculo da v26 vira superior inferido_por_cargo só na mesma organização', () => {
   const b = lerFixture('base-mini.json');
@@ -248,6 +255,7 @@ test('atuacoesIniciais: Ana tem duas atuações, uma em cada organização, e va
   - `avaliadosDe(S, pessoaId, organizacaoId): Atuacao[]`: atuações cujo superior é uma atuação dessa pessoa nessa organização.
   - `visiveis(S): PessoaPublica[]`: avaliador: `avaliadosDe` na organização selecionada; demais papéis: `pessoasDa` da organização selecionada. **Nunca a rede inteira** (Review Focus 1).
   - `rotuloOrigem(atuacao): string`: `'Definido pelo RH'`, `'Inferido pelo cargo'`, `'Inferido pela empresa'`, `'Da carga, sem superior'`.
+  - `nivelDe(S, pessoaId): 'N1'|'N2'|'N3'|'N4'|'N5'|'N6'|null` (spec 6, D20): sem subordinados → `null`; só subordinados diretos sem líderes abaixo → N1; algum subordinado que é líder → N2; raiz de unidade → N4; na estrutura corporativa, subordinado direto da raiz corporativa → N6 (diretores gerais) e quem tem raiz de unidade abaixo → N5; raiz corporativa → N6; RH da holding → N6 pelo papel. N3 (chefe de setor) fica para o Plano C, quando setor existir na plataforma. A aba Usuários passa a exibir `nivelDe`, nunca o campo gravado.
   - `S.organizacaoSelecionada` default: `'LAGHETTO RESORT GOLDEN'` normalizado, se existir; senão a primeira.
 
 - [ ] **Step 1: Testes que falham**
@@ -262,6 +270,11 @@ test('visiveis para avaliador é só a equipe dele na organização selecionada'
   const { S } = await carregarPagina(lerFixture('base-mini.json'));
   S.perfil = { papel: 'avaliador', pessoaId: 'SUP' }; S.organizacaoSelecionada = 'GOLDEN';
   assert.deepEqual(visiveis(S).map(p => p.id).sort(), ['CAM1']);
+});
+test('nivelDe deriva da posição: supervisora N1, gerente geral N4, diretor regional N5, CEO N6', async () => {
+  const { S } = await carregarPagina(lerFixture('base-mini.json'));
+  assert.equal(nivelDe(S, 'SUP'), 'N1'); assert.equal(nivelDe(S, 'GG'), 'N4');
+  assert.equal(nivelDe(S, 'DR'), 'N5'); assert.equal(nivelDe(S, 'CEO-REDE'), 'N6'); assert.equal(nivelDe(S, 'CAM'), null);
 });
 test('visiveis para RH nunca devolve pessoa de outra organização', async () => {
   const { S } = await carregarPagina(lerFixture('base-mini.json'));
@@ -307,6 +320,9 @@ test('chave da avaliação separa as duas atuações da mesma pessoa', async () 
   - `renderArvore(no: No, opcoes: { profundidadeAberta: number, pessoas: Map<id,PessoaPublica>, destacarSemSuperior: boolean }): string`: HTML aninhado; nós abaixo de `profundidadeAberta` vêm com `hidden`; cada caixa tem `data-atuacao`, nome, função, rótulo de origem e contagem de subordinados.
   - `resumoOrganizacao(S, organizacaoId): { total, comSuperior, semSuperior, inferidos, definidos, semOrganizacao }`.
   - Tela: cabeçalho com seletor de organização e filtro por empresa, medidor "N de M com líder definido, K sem líder", lista vermelha "Sem líder" com os nomes, árvore colapsável, legenda de origem. Clique numa caixa abre o painel de montagem (Tarefa 5).
+  - **Visão Rede (D20):** opção "Rede" no seletor, que renderiza a árvore de `LAGHETTO CORPORATIVO` com `renderArvore`; cada atuação que é raiz de uma unidade (a pessoa tem outra atuação com `ehRaiz` em organização tipo `unidade`) vem como caixa fechada da unidade: nome da unidade, nome do gerente geral, medidor `resumoOrganizacao` da unidade, vermelha quando a unidade não tem raiz. Clicar troca o seletor para a unidade. Unidades cujo gerente geral não tem atuação corporativa aparecem numa faixa "Unidades sem ligação ao corporativo: N" com os nomes.
+  - **Cabeçalho da unidade:** "Gerente geral: Fulano · avaliado por: Beltrano (estrutura corporativa)" com link que sobe para a Rede; "sem ligação ao corporativo" em vermelho quando falta.
+  - `ligacoesCorporativas(S): { ligadas: string[], semLigacao: string[] }` com os ids das unidades.
 
 - [ ] **Step 1: Testes que falham**
 
@@ -329,6 +345,16 @@ test('camareira com dois superiores aparece sob as duas caixas', () => {
   const S = montarEstado(lerFixture('base-mini.json'));
   const doc = new JSDOM(renderArvore(arvore(S.atuacoes, 'GOLDEN'), { profundidadeAberta: 9, pessoas: S.pessoasPorId })).window.document;
   assert.equal([...doc.querySelectorAll('[data-atuacao]')].filter(el => el.dataset.pessoa === 'CAM').length, 2);
+});
+test('visão Rede mostra o Golden como caixa fechada sob DR e marca unidade sem ligação', async () => {
+  const { document, S, window } = await carregarPagina(lerFixture('base-mini.json'));
+  S.perfil = { papel: 'admin' }; window.irPara('arvore');
+  document.querySelector('#ar-org').value = 'LAGHETTO CORPORATIVO'; document.querySelector('#ar-org').dispatchEvent(new window.Event('change'));
+  const caixa = document.querySelector('[data-unidade="GOLDEN"]');
+  assert.ok(caixa); assert.match(caixa.textContent, /GERENTE GERAL/i);
+  assert.match(document.querySelector('#ar-sem-ligacao').textContent, /BRANO/);
+  caixa.click(); assert.equal(document.querySelector('#ar-org').value, 'GOLDEN');
+  assert.match(document.querySelector('#ar-cabecalho').textContent, /avaliado por/);
 });
 test('tela Árvore: trocar de organização re-renderiza e o medidor bate com resumoOrganizacao', async () => {
   const { document, S, window } = await carregarPagina(lerFixture('base-mini.json'));
@@ -359,6 +385,8 @@ test('tela Árvore com a base real renderiza o Golden em menos de 500 ms', { ski
   - `remover(atuacoes, id, autor, quando): Atuacao[]`: `superiorId: null`, `origem: 'definido'`, devolve ao pool.
   - `marcarLider(atuacoes, id): Atuacao[]`: marca `podeLiderar: true` (aparece na coluna de líderes).
   - `confirmarInferido(atuacoes, id, autor, quando): Atuacao[]`: mantém o superior, troca `origem` para `'definido'`.
+  - `marcarRaiz(atuacoes, id, autor, quando): Atuacao[]`: define `ehRaiz: true` e tira a marca da raiz anterior da mesma organização; lança `codigo: 'raiz_com_superior'` se a atuação tiver superior.
+  - Permissões novas em `RECURSOS` (D20): `editarCorporativo` ("Editar estrutura corporativa") e `definirRaiz` ("Definir raiz da unidade"), só `admin`. Na visão Rede e no "Marcar como raiz", a tela consulta `pode(...)`; RH da unidade vê mas não edita.
   - Tela: clicar numa caixa da árvore seleciona o líder; o painel mostra a equipe com "Remover" por linha, abaixo o pool com filtros e checkboxes, botão "Adicionar N à equipe de X" (desabilitado com 0 selecionados), e "Confirmar vínculo inferido" quando a caixa clicada tem subordinados inferidos. Toda mutação passa por `mudar(desc, fn)` da versão 26, logo entra no Desfazer.
 
 - [ ] **Step 1: Testes que falham**
@@ -370,6 +398,8 @@ test('adicionarEmBloco que criaria ciclo lança o erro de validarArvore', () => 
 test('remover devolve ao pool e pool a lista de novo', () => {});
 test('pool filtra por cargo e por texto sem acento', () => { /* 'camareir' acha CAMAREIRA */ });
 test('confirmarInferido troca origem sem mudar superior', () => {});
+test('marcarRaiz troca a raiz da organização e rejeita atuação com superior', () => {});
+test('RH da unidade não vê os controles de montagem na visão Rede nem o botão de raiz', async () => {});
 test('painel: adicionar 2 em bloco pela tela entra no HIST e desfazer restaura', async () => {
   const { document, S, window } = await carregarPagina(lerFixture('base-mini.json'));
   S.perfil = { papel: 'rh_unidade' }; window.irPara('arvore');
@@ -398,8 +428,8 @@ test('painel: adicionar 2 em bloco pela tela entra no HIST e desfazer restaura',
 
 **Interfaces:**
 - Produces:
-  - `filaDePendencias(S, organizacaoId|null): Item[]` onde `Item = { codigo, descricao, pessoaId, nome, acaoSugerida, origem: 'carga'|'hierarquia' }`. Junta as pendências da carga (`base.pendencias`, filtradas pelas pessoas da organização, ou todas se `null`) com as da hierarquia: `sem_superior`, `sem_organizacao`, `organizacao_sem_raiz`, `vinculo_inferido_nao_confirmado`.
-  - `DESCRICOES`: mapa código → `{ descricao, acaoSugerida }` em português, cobrindo os 10 códigos da carga mais os 4 da hierarquia.
+  - `filaDePendencias(S, organizacaoId|null): Item[]` onde `Item = { codigo, descricao, pessoaId, nome, acaoSugerida, origem: 'carga'|'hierarquia' }`. Junta as pendências da carga (`base.pendencias`, filtradas pelas pessoas da organização, ou todas se `null`) com as da hierarquia: `sem_superior`, `sem_organizacao`, `organizacao_sem_raiz`, `raiz_sem_ligacao_corporativa`, `vinculo_inferido_nao_confirmado`.
+  - `DESCRICOES`: mapa código → `{ descricao, acaoSugerida }` em português, cobrindo os 10 códigos da carga mais os 5 da hierarquia.
   - Tela: tabela com filtro por código e por organização, contadores no topo, link "Abrir na árvore" para itens de hierarquia.
 
 - [ ] **Step 1: Testes que falham**
@@ -422,13 +452,14 @@ test('tela Pendências filtra por código', async () => {});
 - Modify: `app/index.html`: onde a versão 26 abre ciclo (`data-abrir` em `renderCiclos` e o botão do Painel do avaliador): consultar `resumoOrganizacao(S, org).semSuperior` e `validarArvore`.
 
 **Interfaces:**
-- Produces: `podeAbrirCiclo(S, organizacaoId): { pode: boolean, motivo: string|null }` em `app/js/modelo/montagem.js`. Motivos, nesta ordem: `'organização sem raiz definida'`, `'N pessoas sem líder definido'`, erro de `validarArvore`. Botão desabilitado com o motivo escrito ao lado (spec 7.4).
+- Produces: `podeAbrirCiclo(S, organizacaoId): { pode: boolean, motivo: string|null }` em `app/js/modelo/montagem.js`. Motivos, nesta ordem: `'organização sem raiz definida'`, `'raiz sem ligação à estrutura corporativa'` (D20, só para tipo `unidade`), `'N pessoas sem líder definido'`, erro de `validarArvore`. Botão desabilitado com o motivo escrito ao lado (spec 7.4).
 
 - [ ] **Step 1: Testes que falham**
 
 ```js
 test('podeAbrirCiclo nega com pessoas sem líder e nomeia a quantidade', () => {});
 test('podeAbrirCiclo nega organização sem raiz', () => {});
+test('podeAbrirCiclo nega unidade cuja raiz não tem atuação corporativa', () => {});
 test('podeAbrirCiclo permite quando todos têm líder e a árvore valida', () => {});
 test('botão Abrir ciclo fica desabilitado e mostra o motivo', async () => { /* jsdom: #ci-lista [data-abrir] disabled e texto ao lado */ });
 ```
@@ -493,7 +524,9 @@ test('página com banco falso lê o delta no boot e grava ao montar', async () =
 
 **Decisões que o executor vai encontrar e já estão tomadas aqui:** os vínculos inferidos da versão 26 entram rotulados, não somem (senão a demonstração do fluxo quebra e o RH perde a referência); a raiz inicial é o Gerente Geral por cargo, rotulada, e os 19 gerentes gerais da rede são todos PJ, por isso a inferência de organização dos PJ importa; PJ sem organização correspondente vai para o pool e para a fila, não é descartado; a chave da avaliação muda para atuação nesta fase; nascimento e idade exata saem do artefato e entra faixa etária; o banco do artefato guarda só o delta.
 
-**O que Marcelo precisa decidir ao aprovar este plano:**
+**Aprovado por Marcelo em 03/11/2026 às 21h14 (os quatro pontos abaixo), com a estrutura corporativa (D20) incluída às 23h10.**
+
+**O que Marcelo decidiu ao aprovar este plano:**
 1. Autorizar a mudança da chave da avaliação para `atuação + tipo` (spec 10.1) e do escopo de leitura para atuação (spec 10.2). Recomendo sim nos dois.
 2. Aceitar que as 36 organizações iniciais sejam as filiais de folha (com o Golden fundido), rotuladas como sugeridas, até o RH entregar a lista real (P8). Alternativa: esperar a lista do RH e não montar nada agora.
 3. Aceitar a tabela de equivalência com a entrada do Golden, rotulada como inferência. Alternativa: deixar os 9 PJ do Golden no pool.

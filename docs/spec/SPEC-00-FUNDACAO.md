@@ -45,6 +45,11 @@ Decididas por Marcelo em 03/11/2026, salvo onde indicado.
 | D13 | Periodicidade por tipo de formulário: Gerente do Hotel e Gerente de Hospedagem anual; Líderes da Operação, Colaboradores e ascendente semestral | Sem respaldo em documento do RH. A homologar (P16) |
 | D14 | Duplo gestor gera duas avaliações, uma por líder | Contraria a decisão do RH de outubro (P15). Simplifica o modelo: cada superior gera uma atuação |
 | D15 | Regras contestadas são parâmetros configuráveis pelo RH da holding, com auditoria | Seção 12 |
+| D16 | Turno sai do modelo (03/11, 21h55). Equipe passa a ser o setor | Relatado por Marcelo a partir de conversa com o RH, sem documento. Atuação perde o campo turno; painel de montagem filtra por cargo e setor |
+| D17 | Marcar uma pessoa como líder cria a conta de Avaliador automaticamente (03/11, 22h20) | Líder é marca da pessoa na organização; define o formulário (líder ou colaborador), a lista de avaliadores e a conta N1. Desmarcar exige que ela não avalie ninguém |
+| D18 | Formulários versionados, editáveis só pelo RH da holding (03/11, 22h30) | Versão publicada é imutável; cada avaliação grava a versão; versão nova vale a partir do próximo ciclo por padrão; comparação entre versões por identificador de pergunta |
+| D19 | Evolução e painéis só com dado real (03/11, 22h30) | Nenhuma nota simulada em tela, nem rotulada. Sem histórico, a tela diz "sem histórico" |
+| D20 | Estrutura corporativa como organização, acima dos hotéis (03/11, 23h10) | Seção 3.3 e 3.5. Gerente geral tem atuação no hotel (raiz) e na estrutura corporativa (subordinado do diretor regional). Só o RH da holding edita a estrutura corporativa e as raízes |
 
 ---
 
@@ -76,8 +81,13 @@ Uma estrutura com cadeia de liderança própria e um topo. Três tipos:
 - **Unidade hoteleira:** Hotel Laghetto Golden, Chateau du Golden, Villa Moura
 - **Área administrativa:** Pós-Vendas da LGM, Marketing, TI, Fiscal
 - **Empresa distinta do grupo:** Brano Administradora de Condomínios, Condomínio Athivabrasil
+- **Estrutura corporativa (D20):** uma única organização, "Laghetto Corporativo", com raiz no CEO e, abaixo, diretores gerais, diretores regionais e as diretorias de área. É o que liga os hotéis entre si sem criar uma árvore única da rede.
 
-Campos: nome, tipo, regional (quando aplicável), situação (ativa ou inativa).
+Campos: nome, tipo, regional (quando aplicável), situação (ativa ou inativa), origem (sugerida pela carga ou definida pelo RH).
+
+**Como os hotéis se ligam ao corporativo (D20):** o gerente geral de cada unidade tem duas atuações: raiz da unidade e subordinado do seu diretor regional na estrutura corporativa. É o mesmo mecanismo de D14, sem regra nova. Ele é avaliado pelo diretor regional pela atuação corporativa; a unidade é avaliada por ele. Toda raiz de unidade precisa de uma atuação corrente na estrutura corporativa; faltar vira pendência e trava o ciclo (seção 7.4).
+
+**Quem edita:** a estrutura corporativa e as raízes das unidades são editadas só pelo RH da holding (permissões "Editar estrutura corporativa" e "Definir raiz da unidade"). O RH da unidade monta apenas dentro da própria unidade.
 
 A árvore de hierarquia existe por organização, nunca por empresa pagadora e nunca para a rede inteira de uma vez.
 
@@ -85,7 +95,7 @@ A árvore de hierarquia existe por organização, nunca por empresa pagadora e n
 
 O centro do modelo. Liga pessoa a organização, com função e superior.
 
-Campos: pessoa, organização, função, superior (outra atuação), setor, turno, equipe, data de início, data de fim, situação.
+Campos: pessoa, organização, função, superior (outra atuação), setor, equipe, líder (marca, D17), data de início, data de fim, situação. Turno não existe no modelo (D16).
 
 **Regra que define quando criar uma atuação nova:** **cada superior diferente gera uma atuação.** Mudar apenas de empresa pagadora não cria atuação. Mudar de função sob o mesmo superior também não: é alteração da atuação existente, com histórico.
 
@@ -107,6 +117,7 @@ Invariantes (sobre as atuações correntes, isto é, ativas e sem data de fim; a
 - Toda organização tem exatamente uma atuação raiz, marcada explicitamente como raiz (`ehRaiz`) e sem superior
 - Uma atuação tem no máximo um superior, e ele pertence à mesma organização e está corrente
 - Atuação sem superior e sem marca de raiz não é erro de validação: é pendência, e é o que trava a abertura do ciclo (seção 7.4)
+- Raiz de unidade sem atuação corrente na estrutura corporativa é pendência da unidade e também trava o ciclo (D20)
 
 ### 3.6 Snapshot de ciclo
 
@@ -209,6 +220,8 @@ Abrangências de leitura, com o nível como rótulo derivado e não como campo d
 
 Papel administrativo (o que pode editar) continua como eixo separado da abrangência (o que pode ver).
 
+**Derivação do nível (D20):** quem só tem subordinados diretos é N1; quem tem líderes abaixo de si é N2; chefe de setor é N3; raiz da unidade é N4; diretor regional é N5; CEO, diretores gerais e RH da holding são N6. A coluna "Nível" da tela de usuários é calculada, nunca digitada.
+
 **Papel de acompanhante:** o manual do RH cita gestor geral, RH/DP da unidade e equipe de R&S acompanhando avaliações. Acompanhar não é avaliar nem administrar. É um terceiro papel e não existe hoje no RBAC. Entra neste subprojeto como papel de leitura sobre atuações específicas.
 
 ---
@@ -217,7 +230,12 @@ Papel administrativo (o que pode editar) continua como eixo separado da abrangê
 
 ### 7.1 Árvore da organização (entrada)
 
-Mostra a estrutura gerada a partir das atuações. Destaca em vermelho quem está sem superior e caixas vazias. Cabeçalho com seletor de organização, filtro por empresa contratante e medidor de completude ("138 de 173 com líder, 35 sem líder").
+Mostra a estrutura gerada a partir das atuações, em dois níveis de zoom (D20):
+
+- **Visão Rede:** a árvore da estrutura corporativa. Cada unidade aparece como caixa fechada sob o seu diretor regional, com o nome do gerente geral e o medidor de completude da unidade. Caixa vermelha quando a unidade está sem raiz ou sem ligação ao corporativo. Clicar desce para a unidade.
+- **Visão Unidade:** a árvore da unidade. Cabeçalho "Gerente geral: Fulano · avaliado por: Diretor Regional R2 (estrutura corporativa)", clicável para subir.
+
+Destaca em vermelho quem está sem superior e caixas vazias. Cabeçalho com seletor de organização, filtro por empresa contratante e medidor de completude ("138 de 173 com líder, 35 sem líder").
 
 É a tela que o RH corporativo usa para validar as organizações e a que vai para reunião. Não é editável por arrasto.
 
@@ -225,7 +243,7 @@ Mostra a estrutura gerada a partir das atuações. Destaca em vermelho quem est�
 
 Inverte a pergunta. Em vez de perguntar o líder de cada uma das 173 pessoas, pergunta a equipe de cada um dos 5 a 8 líderes.
 
-Equipe atual à direita, com remoção individual. Abaixo, o conjunto de pessoas sem superior na organização, filtrável por cargo, setor e turno, com seleção múltipla e adição em bloco. A supervisora de andares seleciona as 12 camareiras do turno da manhã numa ação.
+Equipe atual à direita, com remoção individual. Abaixo, o conjunto de pessoas sem superior na organização, filtrável por cargo e setor (turno saiu, D16), com seleção múltipla e adição em bloco. A governanta seleciona as 12 camareiras do setor numa ação. Na visão Rede, o pool são os PJ sem organização e os gerentes gerais.
 
 Ações: adicionar em bloco, remover, marcar pessoa como líder, desfazer.
 
@@ -320,6 +338,8 @@ Condição de aprovação de Marcelo (03/11/2026): as regras de negócio contest
 | Limite da trava de inativação em massa | percentual e número absoluto | 5% ou 10 pessoas | D11 |
 | Janela de alerta de prazo | dias antes do vencimento | 15 | |
 | Quem abre e quem encerra ciclo | por papel | líder abre, RH regional encerra | fechada |
+| Formulários (D18) | pilares e perguntas, por tipo, versionados | planilhas do RH como versão 1 | P6 |
+| Vigência de versão nova de formulário | próximo ciclo; ciclo atual | próximo ciclo | a confirmar com o RH |
 
 Uma mudança de parâmetro vale para ciclos abertos depois dela. Ciclo já aberto mantém os parâmetros com que foi aberto, gravados junto com o snapshot (seção 3.6). Isso impede que uma mudança de regra no meio do ano altere avaliação já enviada.
 
