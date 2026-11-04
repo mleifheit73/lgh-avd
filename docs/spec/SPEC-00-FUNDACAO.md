@@ -50,6 +50,8 @@ Decididas por Marcelo em 03/11/2026, salvo onde indicado.
 | D18 | Formulários versionados, editáveis só pelo RH da holding (03/11, 22h30) | Versão publicada é imutável; cada avaliação grava a versão; versão nova vale a partir do próximo ciclo por padrão; comparação entre versões por identificador de pergunta |
 | D19 | Evolução e painéis só com dado real (03/11, 22h30) | Nenhuma nota simulada em tela, nem rotulada. Sem histórico, a tela diz "sem histórico" |
 | D20 | Estrutura corporativa como organização, acima dos hotéis (03/11, 23h10) | Seção 3.3 e 3.5. Gerente geral tem atuação no hotel (raiz) e na estrutura corporativa (subordinado do diretor regional). Só o RH da holding edita a estrutura corporativa e as raízes |
+| D21 | Colaborador fixo no Formulário; nenhuma avaliação salva incompleta (03/11, 23h21) | Vindo do painel, sem seletor; pela aba, escolha explícita; guarda de saída com campos faltando |
+| D22 | Indicação de promoção pelo líder imediato é a entrada da sabatina (03/11, 23h47) | Exige avaliação enviada; relato literal, cargo pretendido em texto livre; retirada pelo líder em 24h, depois só RH; dossiê com histórico, gráfico de notas reais e parecer por IA rotulado |
 
 ---
 

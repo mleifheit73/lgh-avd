@@ -1,0 +1,16 @@
+import pw from '/opt/npm-tools/node_modules/playwright/index.js'; const { chromium } = pw;
+const URL='file:///tmp/claude-0/-home-claude/3623909c-8331-5f31-a91b-2eae438e4346/scratchpad/rh/index.html';
+const b = await chromium.launch(); const pg = await b.newPage({viewport:{width:1440,height:900}}); const r={erros:[]};
+pg.on('pageerror', e=>r.erros.push(String(e)));
+await pg.goto(URL); await pg.waitForTimeout(300);
+await pg.click('.perfil[data-p="rafael"]'); await pg.waitForTimeout(100);
+await pg.click('#nav [data-tela="evolucao"]'); await pg.waitForTimeout(200);
+const ler = async()=>({ aviso:(await pg.textContent('#ev-origem')).replace(/\s+/g,' ').slice(0,110), kpis: await pg.$$eval('#ev-kpis .kpi .v', v=>v.map(x=>x.textContent)), pilares: await pg.$$eval('#ev-pilares .delta', d=>d.map(x=>x.textContent)) });
+r.semEnvio = await ler();
+await pg.evaluate(()=>{ const n={}; for(let i=0;i<5;i++) for(let j=0;j<4;j++) n[i+'.'+j]=4; ENVIADAS['RG-55|colab']=[{versao:1,por:'Rafael',em:'03/11/2026 às 22:40',ciclo:2,cicloNome:'2º ciclo de 2026',tipo:'colab',notas:n,obs:{},media:4}]; $('#ev-colab').value='RG-55'; pintarEvolucao(); });
+r.umEnvio = await ler();
+await pg.evaluate(()=>{ const n={}; for(let i=0;i<5;i++) for(let j=0;j<4;j++) n[i+'.'+j]=3; ENVIADAS['RG-55|colab'].unshift({versao:1,por:'Rafael',em:'20/04/2026 às 10:00',ciclo:1,cicloNome:'1º ciclo de 2026',tipo:'colab',notas:n,obs:{},media:3}); pintarEvolucao(); });
+r.doisEnvios = await ler();
+r.notaAnteriorNosDados = await pg.evaluate(()=>PESSOAS.filter(p=>'notaAnterior' in p).length);
+await pg.screenshot({path:'/tmp/claude-0/ev.png'});
+console.log(JSON.stringify(r,null,1)); await b.close();

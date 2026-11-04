@@ -1,0 +1,30 @@
+import pw from '/opt/npm-tools/node_modules/playwright/index.js'; const { chromium } = pw;
+const URL='file:///tmp/claude-0/-home-claude/3623909c-8331-5f31-a91b-2eae438e4346/scratchpad/rh/index.html';
+const b = await chromium.launch(); const pg = await b.newPage({viewport:{width:1440,height:900}}); const r={erros:[]};
+pg.on('pageerror', e=>r.erros.push(String(e))); pg.on('console', m=>{ if(m.type()==='error') r.erros.push('console: '+m.text()); });
+await pg.goto(URL); await pg.waitForTimeout(300);
+r.equipes = await pg.evaluate(()=>EQUIPES);
+r.turnoNosDados = await pg.evaluate(()=>PESSOAS.filter(p=>'turno' in p).length);
+await pg.click('.perfil[data-p="rafael"]'); await pg.waitForSelector('#t-avaliador:not([hidden])');
+r.kpisRafael = await pg.$$eval('#av-kpis .kpi', ks=>ks.map(k=>k.querySelector('.l').textContent+'='+k.querySelector('.v').textContent));
+r.cardsRafael = await pg.$$eval('#av-equipes h3', h=>h.map(x=>x.textContent));
+await pg.click('#trocar'); await pg.click('.perfil[data-p="jaqueline"]'); await pg.waitForTimeout(200);
+await pg.click('#nav [data-tela="matriz"]'); await pg.waitForTimeout(200);
+r.filtroTurnoExiste = !!(await pg.$('#f-turno'));
+r.cabecalhos = await pg.$$eval('#t-matriz thead th', t=>t.map(x=>x.textContent));
+r.linhasMatriz = await pg.$$eval('#t-matriz tbody tr', t=>t.length);
+await pg.selectOption('#f-setor','Recepção'); await pg.waitForTimeout(100);
+r.linhasRecepcao = await pg.$$eval('#t-matriz tbody tr', t=>t.length);
+await pg.click('#f-limpar'); await pg.waitForTimeout(100);
+r.linhasAposLimpar = await pg.$$eval('#t-matriz tbody tr', t=>t.length);
+// edicao de setor + desfazer
+const antes = await pg.evaluate(()=>{ const p=PESSOAS.find(x=>x.id==='RG-55'); return p.setor+'|'+p.equipe+'|'+p.avaliadores.join(','); });
+await pg.selectOption('[data-st="RG-55"]','Governança'); await pg.waitForTimeout(150);
+r.aposTrocaSetor = await pg.evaluate(()=>{ const p=PESSOAS.find(x=>x.id==='RG-55'); return p.setor+'|'+p.equipe+'|'+p.avaliadores.join(','); });
+await pg.evaluate(()=>desfazer()); await pg.waitForTimeout(100);
+r.aposDesfazer = await pg.evaluate(()=>{ const p=PESSOAS.find(x=>x.id==='RG-55'); return p.setor+'|'+p.equipe+'|'+p.avaliadores.join(','); });
+r.desfazerOk = r.aposDesfazer===antes;
+for(const t of ['form','relatorio','evolucao','rh','ciclos','usuarios','permissoes']){ await pg.click(`#nav [data-tela="${t}"]`).catch(()=>{}); await pg.waitForTimeout(120); }
+r.permissoesComTurno = await pg.evaluate(()=>RECURSOS.filter(r=>/turno/i.test(r.n)).length);
+await pg.click('#nav [data-tela="matriz"]'); await pg.waitForTimeout(200); await pg.screenshot({path:'/tmp/claude-0/v29-matriz.png'});
+console.log(JSON.stringify(r,null,1)); await b.close();
