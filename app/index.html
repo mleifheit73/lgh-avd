@@ -3715,6 +3715,203 @@ Regras:
 })();
 </script>
 
+<style id="bloco-pendencias-css">
+#t-pendencias .pe-topo{display:grid;gap:14px;margin-bottom:12px}
+#t-pendencias .pe-filtros{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:end}
+#t-pendencias .pe-filtros select{max-width:min(100%,360px)}
+#t-pendencias .pe-grupo{display:grid;gap:6px}
+#t-pendencias .pe-grupo>span{font-size:.8rem;color:var(--muted)}
+#t-pendencias .pe-chips{display:flex;flex-wrap:wrap;gap:8px}
+#t-pendencias .pe-chip{display:inline-flex;align-items:baseline;gap:7px;padding:5px 12px;border:1px solid var(--line);
+  border-radius:999px;background:var(--surface);font-size:.82rem;color:var(--fg)}
+#t-pendencias .pe-chip b{font-family:var(--f-disp);font-variant-numeric:tabular-nums}
+#t-pendencias .pe-chip:hover{border-color:var(--accent)}
+#t-pendencias .pe-chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+#t-pendencias .pe-chip.trava b{color:var(--crit)}
+#t-pendencias .pe-resumo{font-size:.86rem;color:var(--muted);margin:0}
+#t-pendencias td{vertical-align:top}
+#t-pendencias .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#t-pendencias .pe-nome{font-weight:600;overflow-wrap:anywhere}
+#t-pendencias .pe-det{display:block;font-size:.78rem;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+#t-pendencias .pe-desc{display:block;font-size:.8rem;color:var(--muted);margin-top:5px;max-width:44ch}
+#t-pendencias .pe-acao{font-size:.84rem;max-width:44ch}
+#t-pendencias .pe-mais{display:flex;justify-content:center;margin-top:12px}
+#t-pendencias .pe-vazio{color:var(--muted);margin:0;padding:6px 2px}
+#ar-pendencias{font-size:.88rem}
+#ar-pendencias:empty{display:none}
+#ar-pendencias .k{color:var(--crit);font-weight:600}
+</style>
+<script id="bloco-pendencias">
+(function(){
+  if(typeof TELAS === 'undefined' || typeof LGH === 'undefined' || !LGH.pendencias || !window.LGH_ARVORE) return;
+  const P = LGH.pendencias, CORP = LGH.ID_CORPORATIVO, REDE = '__rede__', PASSO = 150;
+  const TRAVAM = new Set(P.TRAVAM_CICLO);
+  const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
+  const nomeOrg = id => id == null ? 'Sem organização' : id === CORP ? 'Estrutura corporativa (Rede)' : ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
+  const DETALHE_INVALIDO = {
+    superior_inexistente: 'O líder não existe mais ou foi encerrado.',
+    superior_fora_da_organizacao: 'O líder pertence a outra organização.',
+    ciclo: 'A cadeia de líderes volta para a própria pessoa.',
+    raiz_com_superior: 'A raiz da organização tem líder, e não pode ter.',
+    multiplas_raizes: 'A organização tem mais de uma raiz.',
+  };
+  const detalheTexto = i => i.codigo === 'vinculo_invalido' ? (DETALHE_INVALIDO[i.detalhe] || i.detalhe || '') : (i.detalhe || '');
+
+  /* ---- aba: logo depois da Árvore ---- */
+  const iArvore = TELAS.findIndex(t=>t.id==='arvore');
+  TELAS.splice(iArvore >= 0 ? iArvore + 1 : TELAS.length, 0, {id:'pendencias', t:'Pendências', req:'verPainelRH'});
+  const sec = document.createElement('section'); sec.id = 't-pendencias'; sec.hidden = true;
+  sec.innerHTML = `<div class="head"><h1>Pendências</h1>
+      <p>O que ainda falta resolver, vindo de duas fontes: a hierarquia (quem avalia quem) e a carga das bases (cadastro incompleto ou duplicado). Cada linha diz o que fazer.</p></div>
+    <div class="card pe-topo">
+      <div class="pe-filtros"><label class="lbl">Organização <select id="pe-org"></select></label></div>
+      <div id="pe-chips"></div>
+      <p id="pe-resumo" class="pe-resumo" aria-live="polite"></p>
+    </div>
+    <div id="pe-tabela"></div>`;
+  document.querySelector('main').appendChild(sec);
+
+  S.pendFiltro = {org: null, codigo: '', limite: PASSO};
+  const orgsDisponiveis = () => organizacoesVisiveis();
+  function orgValida(v){
+    if(v === REDE) return pode('verRede');
+    return orgsDisponiveis().some(o=>o.id===v);
+  }
+  let ITENS = [];
+
+  function filaDoFiltro(){
+    const f = S.pendFiltro;
+    if(!f.org || !orgValida(f.org)) f.org = orgValida(S.organizacaoSelecionada) ? S.organizacaoSelecionada : (orgsDisponiveis()[0] || {}).id || null;
+    if(!f.org) return [];
+    return P.filaDePendencias(S, f.org === REDE ? null : f.org);
+  }
+
+  function chipsHtml(fila){
+    const c = P.contagemPorCodigo(fila), f = S.pendFiltro;
+    const chip = (cod, rotulo, n, trava) => `<button type="button" class="pe-chip${trava?' trava':''}" data-codigo="${esc(cod)}" aria-pressed="${f.codigo===cod}"${trava?' title="Impede abrir o ciclo"':''}>${esc(rotulo)} <b>${n}</b></button>`;
+    const grupo = (titulo, codigos) => {
+      const com = codigos.filter(k=>c[k]);
+      return com.length ? `<div class="pe-grupo"><span>${esc(titulo)}</span><div class="pe-chips">${com.map(k=>chip(k, rotuloCodigo(k), c[k], TRAVAM.has(k))).join('')}</div></div>` : '';
+    };
+    const hier = P.ORDEM_FILA.filter(k=>P.CODIGOS_HIERARQUIA.includes(k));
+    return `<div class="pe-chips">${chip('', 'Todas', fila.length, false)}</div>`
+      + grupo('Hierarquia', hier) + grupo('Carga das bases', P.CODIGOS_CARGA);
+  }
+  const ROTULOS = {
+    sem_superior:'Sem líder', sem_organizacao:'Sem organização', organizacao_sem_raiz:'Organização sem raiz',
+    raiz_sem_ligacao_corporativa:'Raiz sem ligação ao corporativo', vinculo_inferido_nao_confirmado:'Líder inferido, não confirmado',
+    avaliacao_mutua:'Avaliação mútua', vinculo_invalido:'Vínculo inválido',
+    sem_cpf:'Sem CPF', sem_cargo:'Sem cargo', sem_empresa:'Sem empresa', sem_nascimento:'Sem nascimento', inicio_futuro:'Início no futuro',
+    tambem_na_base_clt:'Também na base CLT', multiplas_empresas:'Várias empresas', sem_inicio:'Sem data de início',
+    possivel_duplicado:'Possível duplicado', cpf_repetido_na_pj:'CPF repetido no PJ',
+  };
+  const rotuloCodigo = k => ROTULOS[k] || k;
+
+  function linkHtml(i, idx){
+    if(i.origem !== 'hierarquia') return '';
+    if(i.organizacaoId && orgsDisponiveis().some(o=>o.id===i.organizacaoId))
+      return `<button type="button" class="linkish" data-abrir-arvore="${idx}">Abrir na árvore</button>`;
+    if(i.codigo === 'sem_organizacao' && pode('verRede') && orgsDisponiveis().some(o=>o.id===CORP))
+      return `<button type="button" class="linkish" data-abrir-arvore="${idx}">Abrir na Rede</button>`;
+    return '';
+  }
+  function linhaHtml(i, idx){
+    const det = detalheTexto(i);
+    return `<tr data-codigo="${esc(i.codigo)}">
+      <td><span class="pe-nome">${esc(i.nome)}</span>${det?`<span class="pe-det">${esc(det)}</span>`:''}</td>
+      <td>${esc(nomeOrg(i.organizacaoId))}</td>
+      <td><span class="tag ${TRAVAM.has(i.codigo)?'t-crit':i.origem==='hierarquia'?'t-warn':'t-pend'}" title="${esc(i.descricao)}">${esc(rotuloCodigo(i.codigo))}</span>
+        <span class="pe-desc">${esc(i.descricao)}</span></td>
+      <td class="pe-acao">${esc(i.acaoSugerida)}</td>
+      <td style="text-align:right">${linkHtml(i, idx)}</td></tr>`;
+  }
+
+  function render(){
+    const f = S.pendFiltro, fila = filaDoFiltro();
+    const opcoes = (pode('verRede') ? [`<option value="${REDE}">Rede (todas as organizações)</option>`] : [])
+      .concat(orgsDisponiveis().map(o=>`<option value="${esc(o.id)}">${esc(nomeOrg(o.id))}</option>`));
+    $('#pe-org').innerHTML = opcoes.join('');
+    $('#pe-org').value = f.org || '';
+    if(f.codigo && !fila.some(i=>i.codigo===f.codigo)) f.codigo = '';
+    $('#pe-chips').innerHTML = chipsHtml(fila);
+    ITENS = f.codigo ? fila.filter(i=>i.codigo===f.codigo) : fila;
+    const mostrados = ITENS.slice(0, f.limite);
+    $('#pe-resumo').textContent = !f.org ? 'Nenhuma organização no seu escopo.'
+      : fila.length === 0 ? 'Nenhuma pendência nesta visão.'
+      : `${plural(ITENS.length,'pendência','pendências')}${f.codigo?` do tipo ${rotuloCodigo(f.codigo).toLowerCase()}`:''}${ITENS.length!==fila.length?` (de ${fila.length})`:''}.`;
+    $('#pe-tabela').innerHTML = !ITENS.length ? '<div class="card"><p class="pe-vazio">Nada para resolver com este filtro.</p></div>'
+      : `<div class="scroll"><table><thead><tr><th>Pessoa</th><th>Organização</th><th>Pendência</th><th>O que fazer</th><th><span class="sr-only">Ação</span></th></tr></thead>
+        <tbody>${mostrados.map((i,k)=>linhaHtml(i,k)).join('')}</tbody></table></div>`
+        + (ITENS.length > mostrados.length ? `<div class="pe-mais"><button type="button" class="btn sec" id="pe-mais">Mostrar mais ${Math.min(PASSO, ITENS.length - mostrados.length)} de ${ITENS.length - mostrados.length} restantes</button></div>` : '');
+  }
+
+  /* ---- ir para a árvore: seleciona a organização, abre a Árvore e seleciona a atuação ---- */
+  function abrirNaArvore(item){
+    const alvo = item.organizacaoId || CORP;
+    try{ trocarOrganizacao(alvo); }
+    catch(e){ $('#pe-resumo').textContent = avisoErro(e); return; }
+    S.arSelecionada = item.atuacaoId || null;
+    irPara('arvore');
+    if(item.atuacaoId){
+      const c = [...document.querySelectorAll('#t-arvore .ar-caixa')].find(x=>x.dataset.atuacao===item.atuacaoId);
+      if(c){
+        for(let ul = c.closest('ul'); ul && ul.closest('#t-arvore'); ul = ul.parentElement && ul.parentElement.closest('ul')) ul.hidden = false;
+        c.classList.add('ar-ativa'); c.scrollIntoView({block:'center'});
+      }
+      document.dispatchEvent(new CustomEvent('lgh-arvore-selecionada', {detail:{atuacaoId: item.atuacaoId}}));
+    }
+  }
+  sec.addEventListener('click', e=>{
+    if(!(e.target instanceof Element)) return;
+    const ch = e.target.closest('[data-codigo].pe-chip');
+    if(ch){ S.pendFiltro.codigo = ch.dataset.codigo; S.pendFiltro.limite = PASSO; render(); return; }
+    const ab = e.target.closest('[data-abrir-arvore]');
+    if(ab){ const i = ITENS[+ab.dataset.abrirArvore]; if(i) abrirNaArvore(i); return; }
+    if(e.target.closest('#pe-mais')){ S.pendFiltro.limite += PASSO; render(); }
+  });
+  sec.querySelector('#pe-org').addEventListener('change', e=>{
+    S.pendFiltro.org = e.target.value; S.pendFiltro.codigo = ''; S.pendFiltro.limite = PASSO; render();
+  });
+
+  /* ---- contador na Árvore: números do módulo, o mesmo da fila ---- */
+  const topo = document.querySelector('#t-arvore .ar-topo');
+  const cont = document.createElement('div'); cont.id = 'ar-pendencias';
+  if(topo) topo.appendChild(cont);
+  function contador(){
+    const org = S.organizacaoSelecionada;
+    if(!org){ cont.innerHTML = ''; return; }
+    const r = P.resumoFila(S, org);
+    const link = pode('verPainelRH') ? ` <button type="button" class="linkish" id="ar-ver-pendencias">Ver pendências</button>` : '';
+    cont.innerHTML = r.total === 0 ? 'Nenhuma pendência nesta organização.'
+      : `<span class="k">${plural(r.total,'pendência','pendências')}</span> nesta organização (${r.hierarquia} de hierarquia, ${r.carga} da carga).${link}`;
+    cont.dataset.total = String(r.total); cont.dataset.hierarquia = String(r.hierarquia); cont.dataset.carga = String(r.carga);
+  }
+  cont.addEventListener('click', e=>{
+    if(e.target instanceof Element && e.target.closest('#ar-ver-pendencias')){
+      Object.assign(S.pendFiltro, {org: S.organizacaoSelecionada, codigo: '', limite: PASSO}); irPara('pendencias');
+    }
+  });
+
+  const irParaOriginalPe = irPara;
+  irPara = function(id){
+    /* ao chegar de outra tela a fila segue a organização do topo; dentro da tela, a escolha do filtro vale */
+    if(id === 'pendencias' && S.tela !== 'pendencias'){ S.pendFiltro.org = S.organizacaoSelecionada; S.pendFiltro.codigo = ''; S.pendFiltro.limite = PASSO; }
+    const r = irParaOriginalPe.apply(this, arguments);
+    if(S.tela === 'pendencias') render();
+    if(S.tela === 'arvore') contador();
+    return r;
+  };
+  const renderArvoreOriginalPe = window.LGH_ARVORE.render;
+  window.LGH_ARVORE.render = function(){ const r = renderArvoreOriginalPe.apply(this, arguments); contador(); return r; };
+  const trocarOrganizacaoOriginalPe = trocarOrganizacao;
+  trocarOrganizacao = function(id){ if(S.tela === 'pendencias'){ S.pendFiltro.org = id; S.pendFiltro.codigo = ''; } return trocarOrganizacaoOriginalPe.apply(this, arguments); };
+  const desfazerOriginalPe = desfazer;
+  desfazer = function(){ const r = desfazerOriginalPe.apply(this, arguments); if(S.tela === 'pendencias') render(); return r; };
+  montarNav();
+  window.LGH_PENDENCIAS = { render, contador };
+})();
+</script>
+
 
 
 

@@ -27,6 +27,9 @@ export const ORDEM_FILA = [
   'avaliacao_mutua', 'vinculo_invalido', 'vinculo_inferido_nao_confirmado', ...CODIGOS_CARGA,
 ];
 
+/** Pendências de hierarquia que impedem abrir o ciclo (ver podeAbrirCiclo em montagem.js). As demais só pedem conferência. */
+export const TRAVAM_CICLO = ['organizacao_sem_raiz', 'raiz_sem_ligacao_corporativa', 'sem_superior', 'avaliacao_mutua', 'vinculo_invalido'];
+
 export const DESCRICOES = {
   /* ---- carga ---- */
   sem_cpf: {
