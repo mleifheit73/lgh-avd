@@ -211,7 +211,7 @@ export function definirRaizDaRede(S, chave, autor, quando = hoje(), opcoes = {})
 /**
  * Pode abrir o ciclo desta organização? Lê da fila de pendências (fonte única): a trava e a tela Pendências nunca divergem.
  * Motivos, o primeiro que valer: organização sem raiz; raiz sem ligação à estrutura corporativa (só tipo unidade, D20);
- * pessoas sem líder; avaliação mútua; árvore inválida (código de validarArvore). Vínculo inferido ainda não confirmado
+ * pessoas sem líder (regra única precisaDeLider: desligado e afastado não contam); pessoas cujo líder foi desligado; avaliação mútua; árvore inválida (código de validarArvore). Vínculo inferido ainda não confirmado
  * e pendência de carga NÃO travam: pedem conferência, mas há líder e a árvore é válida.
  * Devolve { pode, motivo, codigo }; codigo é o código da pendência que travou. Não escreve em S.
  */
@@ -232,6 +232,11 @@ export function podeAbrirCiclo(S, organizacaoId) {
       ? `${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'} sem líder definido`
       : `${semLider.length} atuações sem líder definido (${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'})`;
     return nega(motivo, 'sem_superior');
+  }
+  const lideresDesligados = de('superior_desligado');
+  if (lideresDesligados.length) {
+    const pessoas = new Set(lideresDesligados.map(i => i.pessoaId)).size;
+    return nega(`${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'} com líder desligado`, 'superior_desligado');
   }
   const mutuas = de('avaliacao_mutua');
   if (mutuas.length) return nega(`avaliação mútua entre ${mutuas[0].detalhe}${mutuas.length > 1 ? ` (e mais ${mutuas.length - 1})` : ''}`, 'avaliacao_mutua');

@@ -7,7 +7,7 @@
  */
 import { ID_CORPORATIVO } from './modelo/organizacao.js';
 import { semSuperior } from './modelo/atuacao.js';
-import { ehCorrente, rotuloOrigem } from './adaptador.js';
+import { ehCorrente, rotuloOrigem, precisaDeLider, atuacoesSemLider } from './adaptador.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const comparar = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -77,9 +77,11 @@ function organizacao(S, id) { return (S.organizacoes || []).find(o => o.id === i
 
 /**
  * Subárvores que arvore() não alcança: uma por atuação sem superior que não é raiz, com quem estiver abaixo dela.
- * É o que a tela mostra em "Sem líder". Mesma forma de nó de arvore(). Ordem estável por id.
+ * Mesma forma de nó de arvore(). Ordem estável por id.
+ * incluir (opcional): filtra as cabeças. A tela passa a regra única (precisaDeLider) para a lista "Sem líder" e o
+ * complemento para mostrar à parte quem saiu do ciclo (desligado, afastado) e ainda tem equipe pendurada.
  */
-export function foraDaArvore(atuacoes, organizacaoId) {
+export function foraDaArvore(atuacoes, organizacaoId, incluir = null) {
   const lista = correntesDaOrg(atuacoes, organizacaoId);
   const filhosDe = new Map();
   for (const a of lista) {
@@ -92,7 +94,7 @@ export function foraDaArvore(atuacoes, organizacaoId) {
     vistos.add(a.id);
     return { atuacao: a, filhos: (filhosDe.get(a.id) ?? []).filter(f => !vistos.has(f.id)).map(montar) };
   };
-  return semSuperior(atuacoes || [], organizacaoId).sort((x, y) => comparar(x.id, y.id)).map(montar);
+  return semSuperior(atuacoes || [], organizacaoId).filter(a => !incluir || incluir(a)).sort((x, y) => comparar(x.id, y.id)).map(montar);
 }
 
 /** Pessoas do pool da carga (PJ sem filial correspondente) que ainda não ganharam atuação corrente em lugar nenhum. */
@@ -103,15 +105,18 @@ export function poolSemOrganizacao(S) {
 
 /**
  * Contagens da organização, por atuação (quem tem dois líderes conta duas vezes, como na avaliação).
- * total = raiz + comSuperior + semSuperior; precisamDeLider = total - raiz é o denominador de todas as partes:
- * definidos + inferidos + comLiderOutraOrigem + semLiderCarga + semLiderRH = precisamDeLider.
+ * Regra única de quem precisa de líder: precisaDeLider (adaptador.js), a mesma da Matriz, do Painel do RH e das Pendências.
+ * total = raiz + foraDoCiclo + comSuperior + semSuperior. precisamDeLider = comSuperior + semSuperior é o denominador de
+ * todas as partes: definidos + inferidos + comLiderOutraOrigem + semLiderCarga + semLiderRH = precisamDeLider.
+ * foraDoCiclo: atuações correntes que não são a raiz e cuja situação funcional não é Ativo nem Férias (desligado, afastado).
  * semOrganizacao: tamanho do pool da rede (não é da organização), para o RH distribuir.
  */
 export function resumoOrganizacao(S, organizacaoId) {
   const lista = correntesDaOrg(S.atuacoes, organizacaoId);
   const raizes = lista.filter(a => a.ehRaiz);
-  const comLider = lista.filter(a => a.superiorId != null);
-  const soltas = semSuperior(S.atuacoes || [], organizacaoId);
+  const noCiclo = lista.filter(a => precisaDeLider(S, a));
+  const comLider = noCiclo.filter(a => a.superiorId != null);
+  const soltas = atuacoesSemLider(S, organizacaoId);
   const inferidos = comLider.filter(a => a.origem === 'inferido_por_cargo' || a.origem === 'inferido_por_empresa').length;
   const definidos = comLider.filter(a => a.origem === 'definido').length;
   return {
@@ -119,7 +124,8 @@ export function resumoOrganizacao(S, organizacaoId) {
     pessoas: new Set(lista.map(a => a.pessoaRef)).size,
     raiz: raizes.length,
     raizId: raizes.length === 1 ? raizes[0].id : null,
-    precisamDeLider: lista.length - raizes.length,   // denominador único do medidor: atuações correntes menos a raiz
+    precisamDeLider: noCiclo.length,                 // denominador único do medidor: atuações que precisam de líder
+    foraDoCiclo: lista.length - raizes.length - noCiclo.length,
     comSuperior: comLider.length,
     semSuperior: soltas.length,
     inferidos,                                       // com líder, vínculo inferido pela carga (cargo ou empresa)

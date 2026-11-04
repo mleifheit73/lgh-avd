@@ -23,6 +23,31 @@ class ErroAdaptador extends Error {
 
 /** Atuação corrente: ativa e sem fim (mesma regra de atuacao.js). */
 export const ehCorrente = a => !!a && a.situacao === 'ativa' && a.fim == null;
+
+/**
+ * Situação funcional (Ativo, Férias, Afastado, Desligado) que a Matriz grava na atuação (situacaoColab, ver definirCampoPessoa).
+ * Fonte única em S.atuacoes; sem registro vale SITUACAO_PADRAO.
+ */
+export const SITUACOES_NO_CICLO = Object.freeze(['Ativo', 'Férias']);
+export const situacaoFuncional = a => (a && a.situacaoColab) || SITUACAO_PADRAO;
+
+/**
+ * Regra única (C2, revisão final do Plano B) de "esta atuação precisa de líder": corrente, não é a raiz da organização e a
+ * situação funcional é Ativo ou Férias. Desligado e Afastado ficam fora do ciclo e não contam como sem líder.
+ * A Matriz (chip), o Painel do RH (KPI), a Árvore (medidor e lista Sem líder), a fila de Pendências e a trava de abertura de
+ * ciclo leem esta função (ou semLider/atuacoesSemLider, que a usam), então os números nunca divergem entre as telas.
+ * S fica na assinatura para a regra poder ler o estado no futuro sem mudar quem chama.
+ */
+export function precisaDeLider(S, atuacao) {
+  return ehCorrente(atuacao) && !atuacao.ehRaiz && SITUACOES_NO_CICLO.includes(situacaoFuncional(atuacao));
+}
+/** Precisa de líder e não tem superior. */
+export function semLider(S, atuacao) { return precisaDeLider(S, atuacao) && atuacao.superiorId == null; }
+/** Atuações da organização sem líder (semLider), em ordem de id. */
+export function atuacoesSemLider(S, organizacaoId) {
+  return (S.atuacoes || []).filter(a => a.organizacaoId === organizacaoId && semLider(S, a))
+    .sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+}
 const hoje = () => new Date().toISOString().slice(0, 10);
 const comparar = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 

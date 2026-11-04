@@ -751,7 +751,8 @@ function itensDoAvaliador(){
 function nomeOrganizacao(){ const o = S.views && S.views.organizacao; return o ? o.nome : 'Nenhuma organização'; }
 function autorAtual(){ return S.perfil ? S.perfil.nome : 'RH'; }
 function avisoErro(e){ return (e && (e.mensagem || e.message)) || String(e); }
-function noCiclo(p){ return p.situacao==='Ativo' || p.situacao==='Férias'; }
+/* No ciclo: situação Ativo ou Férias. A lista é a do adaptador (LGH.SITUACOES_NO_CICLO), a mesma de LGH.precisaDeLider (C2). */
+function noCiclo(p){ return LGH.SITUACOES_NO_CICLO.includes(p.situacao); }
 function tagSit(s){
   const c = s==='Ativo'?'t-ok' : s==='Desligado'?'t-crit' : 't-warn';
   return `<span class="tag ${c}">${esc(s)}</span>`;
@@ -1125,8 +1126,8 @@ function renderAvaliador(){
 
 /* 3 matriz */
 function renderMatriz(){
-  const meuEscopo = visiveis();
-  const semAval = meuEscopo.filter(p=>semAvaliador(p) && noCiclo(p));
+  /* C2: mesma regra e mesma unidade (atuação) do Painel do RH, da Árvore, das Pendências e da trava: LGH.semLider */
+  const semAval = LGH.atuacoesVisiveis(S).filter(a=>LGH.semLider(S, a));
   const chip = $('#m-pendentes');
   chip.hidden = !semAval.length;
   if(semAval.length) chip.textContent = `${semAval.length} sem avaliador`;
@@ -1347,8 +1348,12 @@ function pintarMatriz(){
     pintarMatriz();
   });
 }
-/* Sem avaliador: nenhuma atuação com superior e não é a raiz da organização (a raiz é avaliada pela estrutura corporativa). */
-function semAvaliador(p){ return !p.avaliadores.length && !p.raiz; }
+/* Sem avaliador: alguma atuação da pessoa que precisa de líder (corrente, não raiz, Ativo ou Férias) está sem superior.
+   Regra única do adaptador (LGH.semLider, C2): a raiz é avaliada pela estrutura corporativa; desligado e afastado saem do ciclo. */
+function semAvaliador(p){
+  const porId = (S.views && S.views.atuacoesPorId) || new Map();
+  return (p.atuacoes || []).some(id=>LGH.semLider(S, porId.get(id)));
+}
 /* Atuações com marca de líder na organização selecionada, por nome: são as opções de avaliador. */
 function lideresDaOrganizacao(){
   const nomes = new Map((S.views.atuacoes || []).filter(a=>a.podeLiderar).map(a=>[a.id, fichaAvaliador(a.id).nome]));
@@ -1902,7 +1907,9 @@ function renderRH(){
   const doCiclo = itens.filter(noCiclo);
   const pessoasNoCiclo = AVALIAVEIS.filter(noCiclo);
   const tot=doCiclo.length, ok=doCiclo.filter(concluida).length;
-  const sem=doCiclo.filter(p=>!p.superiorId && !p.raiz);
+  /* C2: regra única do adaptador (LGH.semLider), a mesma da Matriz, da Árvore, das Pendências e da trava */
+  const semLiderDe = p=>LGH.semLider(S, S.views.atuacoesPorId.get(p.atuacaoId));
+  const sem=itens.filter(semLiderDe);
   const fora=AVALIAVEIS.length-pessoasNoCiclo.length;
   const FAIXAS = ['até 24','25 a 34','35 a 44','45 a 54','55 ou mais'];
   const contFaixa = {}; pessoasNoCiclo.forEach(p=>{ if(p.faixaEtaria) contFaixa[p.faixaEtaria]=(contFaixa[p.faixaEtaria]||0)+1; });
@@ -1919,7 +1926,7 @@ function renderRH(){
   const equipes = [...new Set(itens.map(p=>p.equipe))].sort();
   $('#rh-equipes').innerHTML = equipes.map(eq=>{
     const m=itens.filter(p=>p.equipe===eq), f=m.filter(concluida).length, pc=m.length?Math.round(f/m.length*100):0;
-    const semA=m.filter(p=>!p.superiorId && !p.raiz).length;
+    const semA=m.filter(semLiderDe).length;
     return `<div class="ev"><span class="nm">${esc(eq)}${semA?` <span class="tag t-crit">${semA} sem avaliador</span>`:''}</span>
       <span class="track"><i class="b" style="left:0;width:${pc}%"></i></span>
       <span class="delta">${pc}%</span></div>`;
@@ -3202,7 +3209,7 @@ Regras:
     return `<p class="ar-frase" title="Contagem por atuação: a raiz não entra (não tem líder por definição) e quem tem dois líderes conta duas vezes"><b class="num">${r.comSuperior}</b> de <b class="num">${M}</b> com líder</p>
       <div class="bar" role="img" aria-label="${pct}% das atuações com líder"><i style="width:${pct}%"></i></div>
       <p class="ar-detalhe ar-partes">${partes.join(' · ')}</p>
-      <p class="ar-detalhe">${plural(r.pessoas,'pessoa','pessoas')} em ${plural(r.total,'atuação','atuações')}${r.raiz?', fora a raiz da organização':''}.</p>`;
+      <p class="ar-detalhe">${plural(r.pessoas,'pessoa','pessoas')} em ${plural(r.total,'atuação','atuações')}${r.raiz?', fora a raiz da organização':''}${r.foraDoCiclo?`; ${plural(r.foraDoCiclo,'atuação fora do ciclo','atuações fora do ciclo')} (desligado ou afastado) não entra na conta`:''}.</p>`;
   }
   function cartaoUnidade(orgId){
     const r = LGH.resumoOrganizacao(S, orgId), l = LGH.ligacaoDaUnidade(S, orgId);
@@ -3265,13 +3272,19 @@ Regras:
         ? `<p class="ar-vazio">${rede ? 'A estrutura corporativa' : 'Esta organização'} ainda não tem raiz${rede ? '' : ' (gerente geral)'}. Todas as atuações estão em Sem líder até o RH definir a raiz.</p>`
         : `<p class="ar-alerta">A árvore tem uma inconsistência (${esc(erro && erro.codigo || 'erro')}): ${esc(erro && erro.message || '')}. As atuações sem líder estão listadas acima.</p>`;
 
-    /* sem líder: lista vermelha com os nomes e, abaixo, cada uma com quem está debaixo dela */
-    const soltas = LGH.foraDaArvore(S.atuacoes, org);
+    /* sem líder: lista vermelha com os nomes e, abaixo, cada uma com quem está debaixo dela.
+       C2: a regra é LGH.precisaDeLider (a mesma do medidor, das Pendências, da Matriz e do Painel). Quem saiu do ciclo
+       (desligado, afastado) sem líder não conta; se ainda tem equipe pendurada, aparece à parte para a equipe não sumir da tela. */
+    const soltas = LGH.foraDaArvore(S.atuacoes, org, a=>LGH.precisaDeLider(S, a));
+    const foraComEquipe = LGH.foraDaArvore(S.atuacoes, org, a=>!LGH.precisaDeLider(S, a)).filter(n=>n.filhos.length);
     const sem = $('#ar-sem-lider');
-    sem.hidden = soltas.length === 0;
-    sem.innerHTML = soltas.length ? `<div class="ar-faixa"><b>Sem líder: ${soltas.length}</b>
+    sem.hidden = soltas.length === 0 && foraComEquipe.length === 0;
+    sem.innerHTML = (soltas.length ? `<div class="ar-faixa"><b>Sem líder: ${soltas.length}</b>
         <ul>${soltas.map(n=>`<li><button data-alvo="${esc(n.atuacao.id)}">${esc(nomePessoa(n.atuacao.pessoaRef))}</button></li>`).join('')}</ul></div>
-      <div class="card"><div class="ar-arvore">${soltas.map(n=>LGH.renderArvore(n, {...opcoes, profundidadeAberta: 0})).join('')}</div></div>` : '';
+      <div class="card"><div class="ar-arvore">${soltas.map(n=>LGH.renderArvore(n, {...opcoes, profundidadeAberta: 0})).join('')}</div></div>` : '')
+      + (foraComEquipe.length ? `<div class="ar-faixa" id="ar-fora-ciclo"><b>Fora do ciclo, com equipe: ${foraComEquipe.length}</b> (líder desligado ou afastado; a equipe precisa de outro líder)
+        <ul>${foraComEquipe.map(n=>`<li><button data-alvo="${esc(n.atuacao.id)}">${esc(nomePessoa(n.atuacao.pessoaRef))}</button> <span class="motivo">(${esc(LGH.situacaoFuncional(n.atuacao))})</span></li>`).join('')}</ul></div>
+      <div class="card"><div class="ar-arvore">${foraComEquipe.map(n=>LGH.renderArvore(n, {...opcoes, profundidadeAberta: 1})).join('')}</div></div>` : '');
     /* subárvores soltas nascem recolhidas (só a cabeça, com "Expandir"): na base real são dezenas, e abertas a tela passava de 18 mil px */
 
     $('#ar-legenda').innerHTML = 'Origem do vínculo: ' + LGH.LEGENDA_ORIGEM.map(l=>`<span><span class="tag ${l.classe}">${esc(l.curto)}</span>${esc(l.texto)}</span>`).join('');
@@ -3877,7 +3890,7 @@ Regras:
       + grupo('Hierarquia', hier) + grupo('Carga das bases', P.CODIGOS_CARGA);
   }
   const ROTULOS = {
-    sem_superior:'Sem líder', sem_organizacao:'Sem organização', organizacao_sem_raiz:'Organização sem raiz',
+    sem_superior:'Sem líder', superior_desligado:'Líder desligado', sem_organizacao:'Sem organização', organizacao_sem_raiz:'Organização sem raiz',
     raiz_sem_ligacao_corporativa:'Raiz sem ligação ao corporativo', vinculo_inferido_nao_confirmado:'Líder inferido, não confirmado',
     avaliacao_mutua:'Avaliação mútua', vinculo_invalido:'Vínculo inválido',
     sem_cpf:'Sem CPF', sem_cargo:'Sem cargo', sem_empresa:'Sem empresa', sem_nascimento:'Sem nascimento', inicio_futuro:'Início no futuro',
