@@ -1450,6 +1450,8 @@ function renderForm(){
   if(!lista.length){ $('#fm-pilares').innerHTML='<p class="skel">Nenhum colaborador no seu escopo.</p>'; return; }
   const atualId = idAtuacaoDe(S.colab);
   S.colab = lista.find(p=>p.atuacaoId===atualId) || lista[0];
+  /* a atuação mudou sem passar pelo seletor (troca de organização no topo): nota digitada nunca vai para outra pessoa */
+  if(atualId && S.colab.atuacaoId !== atualId){ S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; S.confirmaEnvio=false; }
   sel.innerHTML = lista.map(p=>`<option value="${esc(p.atuacaoId)}" ${p.atuacaoId===S.colab.atuacaoId?'selected':''}>${esc(p.nome)}, ${esc(p.funcao||p.cargo)}${p.totalAtuacoes>1?` · ${p.ordem}ª atuação`:''}</option>`).join('');
   sel.onchange = ()=>{S.colab=colabPorAtuacao(sel.value); S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; renderForm()};
   $('#fm-tipo').value = S.tipo;

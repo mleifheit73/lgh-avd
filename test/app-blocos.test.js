@@ -133,3 +133,13 @@ test('todas as telas abrem sem erro e sem turno nas visões (teste-v29 da v34)',
   assert.equal(window.eval("PESSOAS.filter(p=>'turno' in p).length"), 0);
   assert.deepEqual(erros, []);
 });
+
+test('trocar a organização com nota digitada não leva a nota para outra pessoa', async () => {
+  const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); S.colab = colabPorAtuacao('GOLDEN|CAM|1'); irPara('form')");
+  const nota = document.querySelector('input.nota'); nota.value = '4'; nota.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.equal(Object.keys(S.notas).length, 1);
+  window.eval("trocarOrganizacao('BRANO')");
+  assert.equal(S.colab.organizacaoId, 'BRANO');
+  assert.equal(Object.keys(S.notas).length, 0);
+});
