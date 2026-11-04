@@ -23,6 +23,7 @@ function estadoFalso({ pil = piloto(), extras = lerFixture('atuacoes-corporativo
   return S;
 }
 const ids = l => l.map(x => x.id).sort();
+const pick = r => ({ ok: r.ok, codigo: r.codigo });
 
 /* ================= adaptador puro, no Node ================= */
 
@@ -116,11 +117,11 @@ test('definirSuperior: segundo superior cria a segunda atuação (D14); o mesmo 
 test('definirSuperior recusa raiz, a própria pessoa, outra organização e ciclo, sem alterar nada', () => {
   const S = estadoFalso();
   const antes = JSON.stringify(S.atuacoes);
-  assert.throws(() => definirSuperior(S, 'GOLDEN|GG|1', 'GOLDEN|SUP|1', 'x'), e => e.codigo === 'raiz_com_superior');
-  assert.throws(() => definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|SUP|1', 'x'), e => e.codigo === 'autoavaliacao');
-  assert.throws(() => definirSuperior(S, 'GOLDEN|COZ1|1', 'BRANO|BR3|1', 'x'), e => e.codigo === 'superior_fora_da_organizacao');
-  assert.throws(() => definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|CAM|1', 'x'), e => e.codigo === 'ciclo');
-  assert.throws(() => definirSuperior(S, 'NAO|EXISTE|1', 'GOLDEN|CAM|1', 'x'), e => e.codigo === 'atuacao_inexistente');
+  assert.deepEqual(pick(definirSuperior(S, 'GOLDEN|GG|1', 'GOLDEN|SUP|1', 'x')), { ok: false, codigo: 'raiz_com_superior' });
+  assert.deepEqual(pick(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|SUP|1', 'x')), { ok: false, codigo: 'autoavaliacao' });
+  assert.deepEqual(pick(definirSuperior(S, 'GOLDEN|COZ1|1', 'BRANO|BR3|1', 'x')), { ok: false, codigo: 'superior_fora_da_organizacao' });
+  assert.deepEqual(pick(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|CAM|1', 'x')), { ok: false, codigo: 'avaliacao_mutua' });
+  assert.deepEqual(pick(definirSuperior(S, 'NAO|EXISTE|1', 'GOLDEN|CAM|1', 'x')), { ok: false, codigo: 'atuacao_inexistente' });
   assert.equal(JSON.stringify(S.atuacoes), antes);
 });
 
@@ -154,10 +155,11 @@ test('marcarLider e definirCampoPessoa escrevem nas atuações da pessoa na orga
 
 test('lote: definirUnicoSuperior deixa uma atuação com o superior escolhido; limparSuperiores tira todos', () => {
   const S = estadoFalso({ pil: pilotoDuplo() });
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);
   const r = definirUnicoSuperior(S, 'CAM', 'GOLDEN', 'GOLDEN|DUPLO-VINCULO|1', 'RH');
   assert.equal(r.atuacao.superiorId, 'GOLDEN|DUPLO-VINCULO|1');
   assert.deepEqual(S.atuacoes.filter(a => a.pessoaRef === 'CAM' && a.situacao === 'ativa' && !a.fim).map(a => a.superiorId), ['GOLDEN|DUPLO-VINCULO|1']);
-  assert.throws(() => definirUnicoSuperior(S, 'GG', 'GOLDEN', 'GOLDEN|SUP|1', 'RH'), e => e.codigo === 'raiz_com_superior');
+  assert.deepEqual(pick(definirUnicoSuperior(S, 'GG', 'GOLDEN', 'GOLDEN|SUP|1', 'RH')), { ok: false, codigo: 'raiz_com_superior' });
   limparSuperiores(S, 'CAM', 'GOLDEN', 'RH');
   assert.deepEqual(pessoasDa(S, 'GOLDEN').find(p => p.id === 'CAM').avaliadores, []);
   validarArvore(S.atuacoes, 'GOLDEN');
@@ -192,4 +194,71 @@ test('idDocumentoAvaliacao: só caracteres permitidos, | vira : e é injetiva', 
   const gerados = chaves.map(idDocumentoAvaliacao);
   assert.equal(new Set(gerados).size, chaves.length);
   for (const g of gerados) assert.match(g, /^[A-Za-z0-9_\-.~:@+]+$/);
+});
+
+/* ================= correções da revisão (R15, R16) ================= */
+
+/** Estado do revisor: R raiz, X sob R, A sob X, B sob A. */
+function estadoRevisor() {
+  const mk = (id, p, sup, raiz = false) => ({ id, pessoaRef: p, organizacaoId: 'O', funcao: 'F', inicio: '2026-01-01', superiorId: sup, ehRaiz: raiz, situacao: 'ativa', fim: null, origem: 'carga', podeLiderar: true });
+  return { organizacoes: [{ id: 'O', tipo: 'unidade', nome: 'O', filiais: [] }], base: { pessoas: [], vinculos: [] },
+    pessoas: ['R', 'A', 'X', 'B'].map(id => ({ id, nome: id })), atuacoes: [mk('R', 'R', null, true), mk('X', 'X', 'R'), mk('A1', 'A', 'X'), mk('B1', 'B', 'A1')] };
+}
+
+test('R15: avaliação mútua é recusada (reprodução do revisor) e a árvore fica intacta', () => {
+  const S = estadoRevisor();
+  const antes = JSON.stringify(S.atuacoes);
+  assert.deepEqual(pick(definirSuperior(S, 'A1', 'B1', 't')), { ok: false, codigo: 'avaliacao_mutua' });
+  assert.equal(JSON.stringify(S.atuacoes), antes);
+  validarArvore(S.atuacoes, 'O');
+  const r = removerSuperior(S, 'A1', 't');
+  assert.equal(r.ok, true); assert.equal(r.acao, 'sem_superior');
+  validarArvore(S.atuacoes, 'O');
+});
+
+test('R15: removerSuperior que criaria ciclo é desfeito inteiro (estado mútuo vindo de fora do adaptador)', () => {
+  const S = estadoRevisor();
+  S.atuacoes.push({ ...S.atuacoes[2], id: 'A2', superiorId: 'B1' });   // A|2 sob B, enquanto A avalia B: só possível sem o adaptador
+  const antes = JSON.stringify(S.atuacoes);
+  const r = removerSuperior(S, 'A1', 't');
+  assert.equal(r.ok, false); assert.equal(r.codigo, 'ciclo');
+  assert.equal(JSON.stringify(S.atuacoes), antes);
+});
+
+test('R15: removerSuperior na primeira atuação com uma segunda existente mantém a árvore válida', () => {
+  const S = estadoFalso();
+  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
+  const sup2 = definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH').atuacao;
+  const r = removerSuperior(S, 'GOLDEN|SUP|1', 'RH');
+  assert.equal(r.ok, true); assert.equal(r.acao, 'encerrada');
+  assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|CAM|1').superiorId, sup2.id, 'a camareira passa para a atuação que fica');
+  validarArvore(S.atuacoes, 'GOLDEN');
+});
+
+test('R15: escrita em organização sem raiz (sem_raiz já vinha da carga) continua permitida', () => {
+  const S = estadoFalso();
+  const r = definirSuperior(S, 'BRANO|BR2|1', 'BRANO|BR3|1', 'RH');
+  assert.equal(r.ok, true);
+});
+
+test('R16: id de atuação nunca se repete, nem depois de desfeito', () => {
+  const S = estadoFalso();
+  const snap = JSON.parse(JSON.stringify(S.atuacoes));
+  const a = definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH').atuacao;
+  assert.equal(a.id, 'GOLDEN|CAM|2');
+  S.atuacoes = snap;                                  // desfazer como a página faz: troca S.atuacoes, mantém S.idsUsados
+  const b = definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH').atuacao;
+  assert.equal(b.id, 'GOLDEN|CAM|3');
+});
+
+test('definirUnicoSuperior recusado não deixa mudança parcial (atuações extras não são encerradas)', () => {
+  const S = estadoFalso();
+  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
+  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH');   // SUP com duas atuações
+  marcarLider(S, 'GOLDEN|CAM|1', true);
+  const antes = JSON.stringify(S.atuacoes);
+  const r = definirUnicoSuperior(S, 'SUP', 'GOLDEN', 'GOLDEN|CAM|1', 'RH');   // a camareira é avaliada por SUP: mútua
+  assert.equal(r.ok, false); assert.equal(r.codigo, 'avaliacao_mutua');
+  assert.equal(JSON.stringify(S.atuacoes), antes);
+  assert.equal(pick(definirUnicoSuperior(S, 'COZ1', 'GOLDEN', 'GOLDEN|GG|1', 'RH')).codigo, 'superior_sem_marca_de_lider');
 });

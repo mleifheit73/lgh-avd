@@ -10,6 +10,7 @@
  * Puro: não toca tela nem disco. Roda igual em Node (testes) e no navegador (bundle LGH).
  */
 import { chaveEmpresa } from './carga/normalizar.js';
+import { validarArvore } from './modelo/atuacao.js';
 import { normalizarNome } from './modelo/nome.js';
 
 export const SEM_SETOR = 'Sem setor';
@@ -275,18 +276,116 @@ export function selecionarOrganizacao(S, organizacaoId) {
   return reconstruirViews(S);
 }
 
-/* ---------- escrita (sempre em S.atuacoes) ---------- */
+/* ---------- escrita (sempre em S.atuacoes) ----------
+ * Toda escrita estrutural é uma transação (ruling R15): valida antes, aplica, verifica a árvore da organização depois e,
+ * se algo não fecha, desfaz a mudança inteira. Nunca lança: devolve { ok: true, acao, atuacao } ou { ok: false, codigo, mensagem }.
+ */
 
 function exigir(S, id, papel) {
   const a = atuacaoPorId(S, id);
   if (!a || !ehCorrente(a)) throw new ErroAdaptador('atuacao_inexistente', `${papel} ${id} não existe ou não está corrente`, { id });
   return a;
 }
+/**
+ * Ids de atuação nunca se repetem (ruling R16): S.idsUsados guarda todo id que já existiu neste estado (a página semeia com as
+ * atuações da carga e com a parte de atuação de cada chave de ENVIADAS). Desfazer não tira id do conjunto: um id desfeito não
+ * volta a ser usado, então uma atuação nova nunca herda avaliação de outra.
+ */
+export function idsUsados(S) {
+  if (!S.idsUsados || typeof S.idsUsados.has !== 'function') S.idsUsados = new Set();
+  for (const a of S.atuacoes || []) S.idsUsados.add(a.id);
+  return S.idsUsados;
+}
 function proximoId(S, organizacaoId, pessoaId) {
-  const usados = new Set((S.atuacoes || []).map(a => a.id));
-  let n = (S.atuacoes || []).filter(a => a.organizacaoId === organizacaoId && a.pessoaRef === pessoaId).length + 1;
+  const usados = idsUsados(S);
+  let n = 1;
   while (usados.has(`${organizacaoId}|${pessoaId}|${n}`)) n++;
-  return `${organizacaoId}|${pessoaId}|${n}`;
+  const id = `${organizacaoId}|${pessoaId}|${n}`;
+  usados.add(id);
+  return id;
+}
+
+/* ---- verificação estrutural da organização ---- */
+/** Ciclo entre atuações (vale também em organização sem raiz, onde validarArvore para no sem_raiz). */
+function cicloDeAtuacoes(S, organizacaoId) {
+  const porId = new Map((S.atuacoes || []).filter(ehCorrente).map(a => [a.id, a]));
+  for (const a of correntesDaOrg(S, organizacaoId)) {
+    const vistos = new Set();
+    for (let atual = a; atual && atual.superiorId != null; atual = porId.get(atual.superiorId)) {
+      if (vistos.has(atual.id)) return true;
+      vistos.add(atual.id);
+    }
+  }
+  return false;
+}
+/** Avaliação mútua entre pessoas (R15): grafo pessoa superior → pessoa subordinada na organização, sem ciclo. */
+function cicloDePessoas(S, organizacaoId) {
+  const porId = new Map((S.atuacoes || []).filter(ehCorrente).map(a => [a.id, a]));
+  const abaixo = new Map();
+  for (const a of correntesDaOrg(S, organizacaoId)) {
+    const sup = a.superiorId ? porId.get(a.superiorId) : null;
+    if (!sup) continue;
+    if (!abaixo.has(sup.pessoaRef)) abaixo.set(sup.pessoaRef, new Set());
+    abaixo.get(sup.pessoaRef).add(a.pessoaRef);
+  }
+  const estado = new Map();   // 1 visitando, 2 feito
+  const visitar = p => {
+    if (estado.get(p) === 1) return true;
+    if (estado.get(p) === 2) return false;
+    estado.set(p, 1);
+    for (const q of abaixo.get(p) || []) if (visitar(q)) return true;
+    estado.set(p, 2);
+    return false;
+  };
+  return [...abaixo.keys()].some(visitar);
+}
+function codigoArvore(S, organizacaoId) {
+  try { validarArvore(S.atuacoes || [], organizacaoId); return null; } catch (e) { return e.codigo || e.code || 'arvore_invalida'; }
+}
+/** Pessoa `de` está acima de `ate` (direta ou indiretamente) na organização? */
+function estaAcima(S, organizacaoId, de, ate) {
+  const porId = new Map((S.atuacoes || []).filter(ehCorrente).map(a => [a.id, a]));
+  const superioresDe = p => correntesDaPessoa(S, p, organizacaoId).map(a => a.superiorId && porId.get(a.superiorId)).filter(Boolean).map(a => a.pessoaRef);
+  const vistos = new Set(); const fila = superioresDe(ate);
+  while (fila.length) {
+    const p = fila.shift();
+    if (p === de) return true;
+    if (vistos.has(p)) continue;
+    vistos.add(p); fila.push(...superioresDe(p));
+  }
+  return false;
+}
+
+/**
+ * Transação sobre as atuações de uma organização: guarda cópia, roda `fn`, confere a árvore e desfaz tudo se algo falhar.
+ * Regras depois da escrita: nenhum ciclo entre atuações; nenhuma avaliação mútua entre pessoas (se não havia antes);
+ * validarArvore não pode passar a falhar, nem falhar com código diferente do que já falhava antes (ex.: sem_raiz da carga).
+ */
+function transacao(S, organizacaoId, fn) {
+  const tamanho = (S.atuacoes || []).length;
+  const copias = new Map((S.atuacoes || []).filter(a => a.organizacaoId === organizacaoId).map(a => [a, { ...a }]));
+  const antes = { arvore: codigoArvore(S, organizacaoId), pessoas: cicloDePessoas(S, organizacaoId) };
+  const desfazer = () => {
+    S.atuacoes.length = tamanho;
+    for (const [obj, copia] of copias) {
+      for (const k of Object.keys(obj)) if (!(k in copia)) delete obj[k];
+      Object.assign(obj, copia);
+    }
+  };
+  let r;
+  try { r = fn(); } catch (e) {
+    desfazer();
+    return { ok: false, codigo: e.codigo || 'erro', mensagem: e.message };
+  }
+  let falha = null;
+  if (cicloDeAtuacoes(S, organizacaoId)) falha = ['ciclo', 'A mudança cria um ciclo entre atuações'];
+  else if (!antes.pessoas && cicloDePessoas(S, organizacaoId)) falha = ['avaliacao_mutua', 'A mudança faria duas pessoas se avaliarem mutuamente na organização'];
+  else {
+    const depois = codigoArvore(S, organizacaoId);
+    if (depois && depois !== antes.arvore) falha = [depois, `A mudança deixa a árvore de ${organizacaoId} inválida (${depois})`];
+  }
+  if (falha) { desfazer(); return { ok: false, codigo: falha[0], mensagem: falha[1] }; }
+  return { ok: true, ...r };
 }
 function marcarDefinido(a, autor, quando) {
   a.origem = 'definido'; a.confirmadaPor = autor ?? null; a.definidaEm = quando;
@@ -296,10 +395,14 @@ function marcarDefinido(a, autor, quando) {
  * Define `superiorAtuacaoId` como superior da pessoa da atuação `atuacaoId`.
  * Sem superior: passa a ter. Já tem outro: nasce uma segunda atuação da pessoa com este superior (D14).
  * Já tem este mesmo superior em alguma atuação: nada muda.
- * Recusa (erro com `codigo`): raiz, a própria pessoa, outra organização, ciclo.
- * Devolve { acao: 'definido' | 'criada' | 'nenhuma', atuacao }.
+ * Recusa: raiz, a própria pessoa, outra organização, ciclo, avaliação mútua entre pessoas (R15).
+ * Devolve { ok: true, acao: 'definido' | 'criada' | 'nenhuma', atuacao } ou { ok: false, codigo, mensagem }.
  */
 export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando = hoje()) {
+  const a = atuacaoPorId(S, atuacaoId);
+  return transacao(S, a ? a.organizacaoId : null, () => definirSuperiorSemTransacao(S, atuacaoId, superiorAtuacaoId, autor, quando));
+}
+function definirSuperiorSemTransacao(S, atuacaoId, superiorAtuacaoId, autor, quando) {
   const a = exigir(S, atuacaoId, 'Atuação');
   const sup = exigir(S, superiorAtuacaoId, 'Superior');
   if (a.ehRaiz) throw new ErroAdaptador('raiz_com_superior', `A atuação ${a.id} é raiz da organização e não tem superior`, { id: a.id });
@@ -308,6 +411,9 @@ export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando =
   const minhas = correntesDaPessoa(S, a.pessoaRef, a.organizacaoId);
   const ja = minhas.find(x => x.superiorId === sup.id);
   if (ja) return { acao: 'nenhuma', atuacao: ja };
+  if (estaAcima(S, a.organizacaoId, a.pessoaRef, sup.pessoaRef)) {
+    throw new ErroAdaptador('avaliacao_mutua', 'Avaliação mútua: esta pessoa já está acima do superior escolhido na organização', { id: a.id, superiorId: sup.id });
+  }
   const alvo = a.superiorId == null ? a : null;
   if (alvo) {
     // ciclo: subindo a partir do superior não se pode chegar à própria atuação
@@ -336,9 +442,13 @@ export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando =
 /**
  * Tira o superior da atuação. Se a pessoa tem outra atuação corrente na organização, esta é encerrada (fim = quando),
  * e os subordinados dela passam para a outra atuação da mesma pessoa. Se é a última, fica sem superior (volta ao pool).
- * Devolve { acao: 'encerrada' | 'sem_superior' | 'nenhuma', atuacao }.
+ * Devolve { ok: true, acao: 'encerrada' | 'sem_superior' | 'nenhuma', atuacao } ou { ok: false, codigo, mensagem }.
  */
 export function removerSuperior(S, atuacaoId, autor, quando = hoje()) {
+  const a = atuacaoPorId(S, atuacaoId);
+  return transacao(S, a ? a.organizacaoId : null, () => removerSuperiorSemTransacao(S, atuacaoId, autor, quando));
+}
+function removerSuperiorSemTransacao(S, atuacaoId, autor, quando) {
   const a = exigir(S, atuacaoId, 'Atuação');
   if (a.superiorId == null) return { acao: 'nenhuma', atuacao: a };
   const outras = correntesDaPessoa(S, a.pessoaRef, a.organizacaoId).filter(x => x.id !== a.id);
@@ -385,26 +495,32 @@ export function definirCampoPessoa(S, pessoaId, organizacaoId, campo, valor) {
  * Atuações a mais são encerradas (subordinados passam para a que fica). Devolve { acao, atuacao } ou erro com `codigo`.
  */
 export function definirUnicoSuperior(S, pessoaId, organizacaoId, superiorAtuacaoId, autor, quando = hoje()) {
-  const minhas = correntesDaPessoa(S, pessoaId, organizacaoId);
-  if (!minhas.length) throw new ErroAdaptador('pessoa_fora_da_organizacao', `${pessoaId} não tem atuação corrente em ${organizacaoId}`, { pessoaId });
-  const sup = exigir(S, superiorAtuacaoId, 'Superior');
-  if (minhas.some(a => a.ehRaiz)) throw new ErroAdaptador('raiz_com_superior', `${pessoaId} é raiz de ${organizacaoId}`, { pessoaId });
-  if (sup.pessoaRef === pessoaId) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia', { pessoaId });
-  const fica = minhas.find(a => a.superiorId === sup.id) || minhas[0];
-  for (const a of minhas) if (a !== fica) encerrar(S, a, fica, autor, quando);
-  if (fica.superiorId === sup.id) return { acao: 'nenhuma', atuacao: fica };
-  const anterior = fica.superiorId;
-  fica.superiorId = null;
-  try { return definirSuperior(S, fica.id, sup.id, autor, quando); }
-  catch (e) { fica.superiorId = anterior; throw e; }
+  return transacao(S, organizacaoId, () => {
+    // tudo validado antes de mexer em qualquer atuação; a transação desfaz se a verificação final falhar
+    const minhas = correntesDaPessoa(S, pessoaId, organizacaoId);
+    if (!minhas.length) throw new ErroAdaptador('pessoa_fora_da_organizacao', `${pessoaId} não tem atuação corrente em ${organizacaoId}`, { pessoaId });
+    const sup = exigir(S, superiorAtuacaoId, 'Superior');
+    if (sup.organizacaoId !== organizacaoId) throw new ErroAdaptador('superior_fora_da_organizacao', `O superior ${sup.id} é de outra organização`, { pessoaId });
+    if (!sup.podeLiderar) throw new ErroAdaptador('superior_sem_marca_de_lider', `${sup.id} não está marcado como líder`, { pessoaId });
+    if (minhas.some(a => a.ehRaiz)) throw new ErroAdaptador('raiz_com_superior', `${pessoaId} é raiz de ${organizacaoId}`, { pessoaId });
+    if (sup.pessoaRef === pessoaId) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia', { pessoaId });
+    if (estaAcima(S, organizacaoId, pessoaId, sup.pessoaRef)) throw new ErroAdaptador('avaliacao_mutua', 'Avaliação mútua: esta pessoa já está acima do superior escolhido', { pessoaId });
+    const fica = minhas.find(a => a.superiorId === sup.id) || minhas[0];
+    for (const a of minhas) if (a !== fica) encerrar(S, a, fica, autor, quando);
+    if (fica.superiorId === sup.id) return { acao: 'nenhuma', atuacao: fica };
+    fica.superiorId = null;
+    return definirSuperiorSemTransacao(S, fica.id, sup.id, autor, quando);
+  });
 }
 
 /** Lote "remover avaliadores": a pessoa fica com uma atuação, sem superior. */
 export function limparSuperiores(S, pessoaId, organizacaoId, autor, quando = hoje()) {
-  const minhas = correntesDaPessoa(S, pessoaId, organizacaoId);
-  for (const a of minhas.slice(1)) encerrar(S, a, minhas[0], autor, quando);
-  if (minhas[0]) removerSuperior(S, minhas[0].id, autor, quando);
-  return minhas[0] || null;
+  return transacao(S, organizacaoId, () => {
+    const minhas = correntesDaPessoa(S, pessoaId, organizacaoId);
+    for (const a of minhas.slice(1)) encerrar(S, a, minhas[0], autor, quando);
+    if (minhas[0]) removerSuperiorSemTransacao(S, minhas[0].id, autor, quando);
+    return { acao: minhas[0] ? 'sem_superior' : 'nenhuma', atuacao: minhas[0] || null };
+  });
 }
 
 /* ---------- banco do artefato ---------- */

@@ -647,16 +647,16 @@ function pode(chave){
   return !!r && r.p.includes(S.perfil.papel);
 }
 const SALT = "lgh-avd-2026::";
-const USUARIOS = [{"nome":"Marcelo Leifheit","cargo":"Liderança técnica do projeto","cpf":"","cpfHash":"e7a0f6339cb039fcdbc78900007dffd43052881242801632fecfb19cee9aa796","email":"marcelo.leifheit@laghettohoteis.com.br","papel":"admin","nivel":"N6","escopo":"Rede Laghetto · 37 filiais","ativo":true},{"nome":"Ana Paula Weber Correa","cargo":"Supervisor de Cozinha","cpf":"","email":"ana.correa@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas · Hotel Golden","ativo":true},{"nome":"Tiago Boemeke de Oliveira","cargo":"Chefe de Fila","cpf":"","email":"tiago.oliveira@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas · Hotel Golden","ativo":true},{"nome":"Willian de Lima Estula","cargo":"Chefe de Fila","cpf":"","email":"willian.estula@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas · Hotel Golden","ativo":true},{"nome":"Joselca Bueno Picoloto","cargo":"Supervisor de A&B","cpf":"","email":"joselca.picoloto@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas · Hotel Golden","ativo":true},{"nome":"Adilson Petruci dos Santos","cargo":"Capitao Porteiro","cpf":"","email":"adilson.santos@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção · Hotel Golden","ativo":true},{"nome":"Rafael Schmeier Nunes","cargo":"Supervisor de Recepção","cpf":"","email":"rafael.nunes@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção · Hotel Golden","ativo":true},{"nome":"Luzia de Oliveira Costa dos Santos","cargo":"Supervisor de Recreacao","cpf":"","email":"luzia.santos@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recreação · Hotel Golden","ativo":true},{"nome":"Klisman Holiver Schneider","cargo":"Capitao Porteiro","cpf":"","email":"klisman.schneider@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção · Hotel Golden","ativo":true},{"nome":"Jaqueline Olivaris Goncalves Madeira","cargo":"Analista de RH Pleno","cpf":"","email":"jaqueline.madeira@laghettohoteis.com.br","papel":"rh_unidade","nivel":"N5","escopo":"Hotel Laghetto Golden","ativo":true},{"nome":"Ijuliane Weschenfelder","cargo":"Governanta","cpf":"","email":"ijuliane.weschenfelder@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Governança · Hotel Golden","ativo":true},{"nome":"Vivian","cargo":"Gestão de Pessoas","cpf":"","email":"vivian@laghettohoteis.com.br","papel":"rh_regional","nivel":"N5","escopo":"Regional 2","ativo":true},{"nome":"Christine Gehring","cargo":"Diretoria de Gestão de Pessoas","cpf":"","email":"christine.gehring@laghettohoteis.com.br","papel":"admin","nivel":"N6","escopo":"Rede Laghetto · 37 filiais","ativo":true}];
+const USUARIOS = [{"nome":"Marcelo Leifheit","cargo":"Liderança técnica do projeto","cpf":"","cpfHash":"e7a0f6339cb039fcdbc78900007dffd43052881242801632fecfb19cee9aa796","email":"marcelo.leifheit@laghettohoteis.com.br","papel":"admin","nivel":"N6","escopo":"Rede Laghetto · todas as organizações carregadas","ativo":true},{"nome":"Ana Paula Weber Correa","cargo":"Supervisor de Cozinha","cpf":"","email":"ana.correa@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas","ativo":true},{"nome":"Tiago Boemeke de Oliveira","cargo":"Chefe de Fila","cpf":"","email":"tiago.oliveira@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas","ativo":true},{"nome":"Willian de Lima Estula","cargo":"Chefe de Fila","cpf":"","email":"willian.estula@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas","ativo":true},{"nome":"Joselca Bueno Picoloto","cargo":"Supervisor de A&B","cpf":"","email":"joselca.picoloto@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Alimentos e Bebidas","ativo":true},{"nome":"Adilson Petruci dos Santos","cargo":"Capitao Porteiro","cpf":"","email":"adilson.santos@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção","ativo":true},{"nome":"Rafael Schmeier Nunes","cargo":"Supervisor de Recepção","cpf":"","email":"rafael.nunes@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção","ativo":true},{"nome":"Luzia de Oliveira Costa dos Santos","cargo":"Supervisor de Recreacao","cpf":"","email":"luzia.santos@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recreação","ativo":true},{"nome":"Klisman Holiver Schneider","cargo":"Capitao Porteiro","cpf":"","email":"klisman.schneider@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Recepção","ativo":true},{"nome":"Jaqueline Olivaris Goncalves Madeira","cargo":"Analista de RH Pleno","cpf":"","email":"jaqueline.madeira@laghettohoteis.com.br","papel":"rh_unidade","nivel":"N5","escopo":"Hotel Laghetto Golden","ativo":true},{"nome":"Ijuliane Weschenfelder","cargo":"Governanta","cpf":"","email":"ijuliane.weschenfelder@laghettohoteis.com.br","papel":"avaliador","nivel":"N1","escopo":"Governança","ativo":true},{"nome":"Vivian","cargo":"Gestão de Pessoas","cpf":"","email":"vivian@laghettohoteis.com.br","papel":"rh_regional","nivel":"N5","escopo":"Regional 2","ativo":true},{"nome":"Christine Gehring","cargo":"Diretoria de Gestão de Pessoas","cpf":"","email":"christine.gehring@laghettohoteis.com.br","papel":"admin","nivel":"N6","escopo":"Rede Laghetto · todas as organizações carregadas","ativo":true}];
 const PERFIS = [
  {id:'rafael', papel:'avaliador', nome:'Rafael Schmeier Nunes', cargo:'Supervisor de Recepção', nivel:'N1', escopo:'Recepção',
   desc:'Avalia a equipe da recepção.'},
  {id:'ijuliane', papel:'avaliador', nome:'Ijuliane Weschenfelder', cargo:'Governanta', nivel:'N1', escopo:'Governança',
   desc:'Contratada pelo CNPJ do Vita e avalia a governança do Golden. É o caso de avaliador fora do CNPJ.'},
  {id:'jaqueline', papel:'rh_unidade', nome:'Jaqueline Olivaris Goncalves Madeira', cargo:'Analista de RH Pleno', nivel:'N5', escopo:'Unidade',
-  desc:'RH da unidade. Enxerga todas as equipes do Hotel Golden.'},
+  desc:'RH da unidade. Enxerga todas as equipes da organização escolhida no topo.'},
  {id:'holding', papel:'admin', nome:'RH Corporativo', cargo:'Gestão de Pessoas da holding', nivel:'N6', escopo:'Rede',
-  desc:'Visão consolidada das 37 filiais e dos CNPJs do grupo.'}
+  desc:'Visão de todas as organizações carregadas, uma de cada vez.'}
 ];
 
 const TELAS = [
@@ -750,7 +750,7 @@ function itensDoAvaliador(){
 }
 function nomeOrganizacao(){ const o = S.views && S.views.organizacao; return o ? o.nome : 'Nenhuma organização'; }
 function autorAtual(){ return S.perfil ? S.perfil.nome : 'RH'; }
-function avisoErro(e){ return (e && e.message) || String(e); }
+function avisoErro(e){ return (e && (e.mensagem || e.message)) || String(e); }
 function noCiclo(p){ return p.situacao==='Ativo' || p.situacao==='Férias'; }
 function tagSit(s){
   const c = s==='Ativo'?'t-ok' : s==='Desligado'?'t-crit' : 't-warn';
@@ -1354,11 +1354,14 @@ function lideresDaOrganizacao(){
   const nomes = new Map((S.views.atuacoes || []).filter(a=>a.podeLiderar).map(a=>[a.id, fichaAvaliador(a.id).nome]));
   return (S.views.atuacoes || []).filter(a=>a.podeLiderar).sort((x,y)=>nomes.get(x.id).localeCompare(nomes.get(y.id),'pt-BR') || (x.id<y.id?-1:1));
 }
-/* Como mudar(), mas uma recusa do adaptador (erro com codigo) não deixa passo vazio no Desfazer. */
+/* Como mudar(), mas uma recusa do adaptador ({ok:false, codigo}) não deixa passo vazio no Desfazer.
+   O adaptador já desfez a própria mudança (transação, R15); aqui só sai o passo do histórico. */
 function tentarMudar(desc, fn){
-  const n = HIST.length;
-  try{ let valor; mudar(desc, ()=>{ valor = fn(); }); return {ok:true, valor}; }
-  catch(e){ if(HIST.length > n) { const h = HIST.pop(); aplicarInstantanea(h.snap); } return {ok:false, erro:e}; }
+  const n = HIST.length; let valor;
+  try{ mudar(desc, ()=>{ valor = fn(); }); }
+  catch(e){ if(HIST.length > n){ const h = HIST.pop(); aplicarInstantanea(h.snap); } return {ok:false, erro:{codigo:e.codigo||'erro', mensagem:e.message}}; }
+  if(valor && valor.ok === false){ if(HIST.length > n) HIST.pop(); reconstruirViews(); return {ok:false, erro:valor}; }
+  return {ok:true, valor};
 }
 
 function semFiltro(){
@@ -1417,14 +1420,16 @@ function aplicarLote(supId){
   mudar(supId? `avaliador de ${lista.length} pessoas` : `remoção de avaliador de ${lista.length} pessoas`, ()=>{
     if(supId){
       let ok = 0; const pulados = {autoavaliacao:0, raiz_com_superior:0, outros:[]};
-      lista.forEach(p=>{
-        try{ LGH.definirUnicoSuperior(S, p.id, org, supId, autor); ok++; }
-        catch(e){ if(e.codigo in pulados && e.codigo!=='outros') pulados[e.codigo]++; else pulados.outros.push(p.nome); }
+      lista.forEach(p=>{   /* cada pessoa é uma transação no adaptador: recusada, fica exatamente como estava */
+        const r = LGH.definirUnicoSuperior(S, p.id, org, supId, autor);
+        if(r.ok) ok++;
+        else if(r.codigo === 'autoavaliacao' || r.codigo === 'raiz_com_superior') pulados[r.codigo]++;
+        else pulados.outros.push(p.nome);
       });
       msg = `${ok} ${ok===1?'pessoa recebeu':'pessoas receberam'} ${nome}.` +
         (pulados.autoavaliacao ? ' A própria pessoa foi ignorada (ninguém se autoavalia).' : '') +
         (pulados.raiz_com_superior ? ' A raiz da organização foi ignorada (é avaliada pela estrutura corporativa).' : '') +
-        (pulados.outros.length ? ` Recusado por criar ciclo ou por regra da árvore: ${pulados.outros.join(', ')}.` : '');
+        (pulados.outros.length ? ` Recusado por criar ciclo, avaliação mútua ou outra regra da árvore, sem nenhuma alteração: ${pulados.outros.join(', ')}.` : '');
     } else {
       lista.forEach(p=>{ LGH.limparSuperiores(S, p.id, org, autor); });
       msg = `Avaliador removido de ${lista.length} ${lista.length===1?'pessoa':'pessoas'}.`;
@@ -2004,8 +2009,8 @@ function renderPermissoes(){
     renderPermissoes();
   });
   $('#pm-aviso').innerHTML = `<b>Escopo por empreendimento.</b> Além do que cada papel pode fazer, ele só age dentro do seu escopo. ` +
-    `O RH da unidade administra o Hotel Golden e não enxerga o Stilo Barra. O RH regional age na sua regional e ` +
-    `responde ao RH da holding, que é o único a alcançar os 37 CNPJs. O ciclo é <b>aberto pelo líder</b> da equipe e ` +
+    `O RH da unidade administra a sua organização e não enxerga as outras. O RH regional age na sua regional e ` +
+    `responde ao RH da holding, que é o único a alcançar todas as ${(S.organizacoes||[]).length} organizações carregadas. O ciclo é <b>aberto pelo líder</b> da equipe e ` +
     `<b>encerrado pelo RH regional</b>.`;
 }
 
@@ -2068,6 +2073,9 @@ async function boot(){
   S.semOrganizacao = carga.semOrganizacao;
   S.logCarga = carga.log;
   for(const e of cfg.atuacoesExtras || []) S.atuacoes.push({origem:'definido', metodoInferencia:null, confirmadaPor:null, podeLiderar:false, ...e});
+  /* R16: todo id de atuação já visto (carga e chaves de avaliação) fica reservado; o banco acrescenta os seus ao carregar */
+  const usados = LGH.idsUsados(S);
+  Object.keys(ENVIADAS).forEach(k=>usados.add(k.slice(0, k.lastIndexOf('|'))));
   S.organizacaoSelecionada = LGH.organizacaoInicial(S, cfg.organizacaoInicial || organizacaoPiloto);
   reconstruirViews();
   ORIGINAL = instantanea();   /* "Restaurar configuração inicial" volta ao estado da carga */
@@ -2323,7 +2331,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
       clearTimeout(timer);
       let n = 0;
       for(const d of snap.docs){ const dados = d.data(); if(!dados || !dados.chave || !Array.isArray(dados.versoes)) continue;
-        ENVIADAS[dados.chave] = dados.versoes; ultimo[dados.chave] = JSON.stringify(dados.versoes); n++; }
+        ENVIADAS[dados.chave] = dados.versoes; ultimo[dados.chave] = JSON.stringify(dados.versoes); n++;
+        if(S.idsUsados) S.idsUsados.add(dados.chave.slice(0, dados.chave.lastIndexOf('|'))); }   /* R16: id de atuação avaliada nunca é reusado */
       pronto = true;
       window.LGH_DB = db; document.dispatchEvent(new CustomEvent('lgh-db-pronto'));
       estado('ok', n ? n + (n===1 ? ' avaliação salva' : ' avaliações salvas') + ' no banco do artefato. Recarregar a página não apaga.' : 'Banco do artefato conectado. Nenhuma avaliação salva ainda.');
@@ -2354,8 +2363,11 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
 <script id="bloco-lid">
 (function(){
   if(typeof PESSOAS === 'undefined' || typeof renderForm !== 'function') return;
-  const UNIDADE = 'Hotel Laghetto Golden';   /* só para as contas de demonstração da v34, cujo escopo cita o Golden */
-  aposBoot(()=>{ USUARIOS.forEach(u => { if(u.unidade == null) u.unidade = /Golden/.test(u.escopo||'') ? UNIDADE : ''; }); });
+  /* unidade da conta vem das atuações da pessoa (primeira organização do tipo unidade), nunca de texto cravado */
+  aposBoot(()=>{ USUARIOS.forEach(u => { if(u.unidade != null) return;
+    const pid = LGH.pessoaIdPorNome(S, u.nome);
+    const a = pid && S.atuacoes.find(x => x.pessoaRef===pid && x.situacao==='ativa' && x.fim==null && (S.organizacoes.find(o=>o.id===x.organizacaoId)||{}).tipo==='unidade');
+    u.unidade = a ? S.organizacoes.find(o=>o.id===a.organizacaoId).nome : ''; }); });
   const contaDe = p => USUARIOS.find(u => u.nome === p.nome);
   /* Plano B: a marca de líder vive na atuação (podeLiderar). Conta segue quem lidera em qualquer organização. */
   const lideraEmAlguma = () => new Set((S.atuacoes||[]).filter(a=>a.podeLiderar && a.situacao==='ativa' && a.fim==null).map(a=>a.pessoaRef));
@@ -2851,19 +2863,31 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar)); if(window.LGH_DB) aposBoot(carregar);
 
   /* ---- quem vê o quê ---- */
+  /* R18: a indicação pertence a uma organização; as antigas, sem o campo, eram todas do Golden */
+  const orgDaIndicacao = ind => ind.organizacaoId || 'HOTEL LAGHETTO GOLDEN';
+  /* "acima" sai das atuações: as pessoas superiores das atuações do líder que indicou, na organização da indicação */
   function destinatarios(ind){
-    const lider = PESSOAS.find(p => p.nome === ind.por);
-    const acima = lider ? lider.avaliadores : [];
-    return { lider: ind.por, acima, rh: ['rh_unidade','rh_regional','admin'] };
+    const org = orgDaIndicacao(ind);
+    const liderId = ind.porPessoaId || LGH.pessoaIdPorNome(S, ind.por);
+    const correntes = (S.atuacoes||[]).filter(a => a.situacao==='ativa' && a.fim==null);
+    const acimaIds = liderId ? [...new Set(correntes.filter(a => a.pessoaRef===liderId && a.organizacaoId===org && a.superiorId)
+      .map(a => (correntes.find(x => x.id===a.superiorId)||{}).pessoaRef).filter(Boolean))] : [];
+    return { lider: ind.por, liderId, acimaIds, org, rh: ['rh_unidade','rh_regional','admin'] };
   }
-  function veIndicacao(ind){
+  /* soSelecionada: a lista da aba mostra, para o RH, só a organização do topo; o alerta conta todas que o perfil alcança (R14) */
+  function veIndicacao(ind, soSelecionada){
     if(!S.perfil) return false;
     const d = destinatarios(ind);
-    if(d.rh.includes(S.perfil.papel)) return true;
-    return S.perfil.nome === d.lider || d.acima.includes(S.perfil.nome);
+    if(d.rh.includes(S.perfil.papel)){
+      if(!LGH.organizacoesVisiveis(S).some(o => o.id === d.org)) return false;
+      return !soSelecionada || d.org === S.organizacaoSelecionada;
+    }
+    const eu = LGH.pessoaDoPerfil(S);
+    return S.perfil.nome === d.lider || (!!eu && (eu === d.liderId || d.acimaIds.includes(eu)));
   }
-  const minhas = () => INDICACOES.filter(veIndicacao).sort((a,b)=> (b.emISO||'').localeCompare(a.emISO||''));
-  const naoLidas = () => minhas().filter(i => !(i.lidasPor||{})[chaveLeitura()] && i.por !== quem()).length;
+  const ordenar = l => l.sort((a,b)=> (b.emISO||'').localeCompare(a.emISO||''));
+  const minhas = () => ordenar(INDICACOES.filter(i => veIndicacao(i, true)));
+  const naoLidas = () => INDICACOES.filter(i => veIndicacao(i, false) && !(i.lidasPor||{})[chaveLeitura()] && i.por !== quem()).length;
 
   /* ---- criar, retirar, mudar status ---- */
   function criarIndicacao(p, cargo, relato){
@@ -2873,7 +2897,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     if(relato.trim().length < 80) return {ok:false, msg:'O relato precisa descrever os motivos com fatos. Escreva ao menos 80 caracteres.'};
     if(INDICACOES.some(i => i.pessoaId===p.id && !['arquivada','retirada'].includes(i.status))) return {ok:false, msg:`${p.nome} já tem uma indicação em aberto. Acompanhe na aba Indicações.`};
     const agoraISO = new Date().toISOString();
-    const ind = { id:'ind-'+Date.now().toString(36), pessoaId:p.id, atuacaoId:p.atuacaoId||null, organizacaoId:p.organizacaoId||S.organizacaoSelecionada, pessoaNome:p.nome, cargoAtual:p.cargo, setor:p.setor, unidade:nomeOrganizacao(),
+    const ind = { id:'ind-'+Date.now().toString(36), pessoaId:p.id, atuacaoId:p.atuacaoId||null, organizacaoId:S.organizacaoSelecionada, porPessoaId:LGH.pessoaDoPerfil(S), pessoaNome:p.nome, cargoAtual:p.cargo, setor:p.setor, unidade:nomeOrganizacao(),
       por:quem(), em:agora(), emISO:agoraISO, cargoPretendido:cargo.trim(), relato:relato.trim(), status:'recebida',
       avaliacoesNaIndicacao: envios.map(v => ({ciclo:v.ciclo, cicloNome:v.cicloNome, tipo:v.tipo, formVersao:v.formVersao||1, versao:v.versao, em:v.em, por:v.por, media:v.media})),
       historico:[{quando:agora(), quandoISO:agoraISO, por:quem(), de:null, para:'recebida', motivo:'Indicação enviada pelo líder imediato.'}],
@@ -2944,7 +2968,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     const selPrevia = S.indSelecionada ? lista.find(i=>i.id===S.indSelecionada) : null;
     if(selPrevia && !(selPrevia.lidasPor||{})[chaveLeitura()]){ selPrevia.lidasPor = {...(selPrevia.lidasPor||{}), [chaveLeitura()]:true}; persistir(selPrevia); montarNav(); }
     const n = naoLidas();
-    $('#ind-alerta').innerHTML = n ? `<div class="ind-alerta"><b>${n} ${n===1?'colaborador foi indicado':'colaboradores foram indicados'} para possível promoção interna</b> e ${n===1?'ainda não foi visto':'ainda não foram vistos'} por você. Abra para ler o dossiê.</div>`
+    $('#ind-alerta').innerHTML = n ? `<div class="ind-alerta"><b>${n} ${n===1?'colaborador foi indicado':'colaboradores foram indicados'} para possível promoção interna</b> e ${n===1?'ainda não foi visto':'ainda não foram vistos'} por você, contando todas as organizações que você alcança. Abra para ler o dossiê.</div>`
       : (S.perfil && S.perfil.papel==='avaliador' ? `<p style="font-size:.82rem;color:var(--muted)">Você vê as indicações que fez e as feitas por quem você avalia. O RH vê todas.</p>` : '');
     const corpo = $('#ind-corpo');
     const sel = S.indSelecionada ? lista.find(i=>i.id===S.indSelecionada) : null;

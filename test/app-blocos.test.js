@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lerFixture, carregarPagina } from './helpers/pagina.js';
+import { validarArvore } from '../app/js/modelo/atuacao.js';
 
 const FUSAO_MINI = [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOLDEN RESORT'] }];
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN' };
@@ -142,4 +143,77 @@ test('trocar a organização com nota digitada não leva a nota para outra pesso
   window.eval("trocarOrganizacao('BRANO')");
   assert.equal(S.colab.organizacaoId, 'BRANO');
   assert.equal(Object.keys(S.notas).length, 0);
+});
+
+/* ================= correções da revisão (R15 a R18) ================= */
+
+test('R16 na página: atuação desfeita não devolve o id; a nova não herda a avaliação', async () => {
+  const { S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  const criar = () => window.eval("tentarMudar('x', ()=>LGH.definirSuperior(S,'GOLDEN|CAM|1','GOLDEN|GG|1','RH')).valor.atuacao.id");
+  assert.equal(criar(), 'GOLDEN|CAM|2');
+  window.eval(`S.colab = colabPorAtuacao('GOLDEN|CAM|2'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
+    FORMS.colab.pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = 4; S.obs[i+'.'+j] = 'fato'; }));
+    salvarAvaliacao();`);
+  assert.ok(window.eval("ENVIADAS['GOLDEN|CAM|2|colab']"));
+  window.eval('desfazer()');
+  assert.equal(S.atuacoes.some(a => a.id === 'GOLDEN|CAM|2'), false);
+  const novo = criar();
+  assert.equal(novo, 'GOLDEN|CAM|3');
+  assert.equal(window.eval(`concluida(colabPorAtuacao('${novo}'))`), false);
+});
+
+test('R16 na página: id de atuação que só existe numa chave do banco fica reservado', async () => {
+  const docs = { };
+  const stub = { use: async (n) => n !== 'db' ? null : ({
+    doc: (c) => ({ get: async () => ({ exists: c in docs, data: () => docs[c] }), set: async () => {} }),
+    collection: (nome) => ({ get: async () => ({ docs: nome === 'avaliacoes' ? [{ data: () => ({ chave: 'GOLDEN|CAM|2|colab', versoes: [{ versao: 1, media: 3, notas: {}, obs: {} }] }) }] : [] }),
+      doc: () => ({ set: async () => {}, delete: async () => {} }) }),
+  }) };
+  const { window } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick(60);
+  const id = window.eval("LGH.definirSuperior(S,'GOLDEN|CAM|1','GOLDEN|GG|1','RH').atuacao.id");
+  assert.equal(id, 'GOLDEN|CAM|3');
+});
+
+test('lote com uma pessoa recusada: as atuações dela ficam exatamente como estavam, as outras recebem', async () => {
+  const { S, window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+    LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|GG|1','RH'); LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|DUPLO-VINCULO|1','RH');
+    LGH.marcarLider(S,'GOLDEN|CAM|1',true); reconstruirViews(); irPara('matriz');`);
+  const antes = JSON.stringify(S.atuacoes.filter(a => a.pessoaRef === 'SUP'));
+  window.eval("S.filtrados = PESSOAS.filter(p=>p.id==='SUP'||p.id==='COZ1'); aplicarLote('GOLDEN|CAM|1'); aplicarLote('GOLDEN|CAM|1')");   // sem filtro ativo o lote pede confirmação: segundo clique
+  assert.equal(JSON.stringify(S.atuacoes.filter(a => a.pessoaRef === 'SUP')), antes);
+  assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|COZ1|1').superiorId, 'GOLDEN|CAM|1');
+  assert.match(document.querySelector('#lote-msg').textContent, /Supervisor de Governança Teste/);
+  validarArvore(S.atuacoes, 'GOLDEN');
+});
+
+test('Matriz: avaliação mútua pela tela é recusada com mensagem e sem passo no Desfazer', async () => {
+  const { S, window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); LGH.marcarLider(S,'GOLDEN|CAM|1',true); reconstruirViews(); irPara('matriz')");
+  const n = window.eval('HIST.length');
+  const linha = [...document.querySelectorAll('#m-tabela tbody tr')].find(tr => tr.querySelector('td b').textContent === 'Supervisor de Governança Teste');
+  const sel = linha.querySelector('select.add-av'); sel.value = 'GOLDEN|CAM|1'; sel.dispatchEvent(new window.Event('change'));
+  assert.match(document.querySelector('#lote-msg').textContent, /Não foi possível: Avaliação mútua/);
+  assert.equal(window.eval('HIST.length'), n);
+  assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|SUP|1').superiorId, null);
+});
+
+test('R18: indicação tem organização; RH vê na lista só a do topo, o alerta conta todas; "acima" vem das atuações', async () => {
+  const { S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
+  const L = window.eval('LGH_IND.lista');
+  const ind = (id, org, por, porPessoaId) => ({ id, pessoaId: 'CAM', pessoaNome: 'x', cargoAtual: 'x', setor: 'x', unidade: 'x', por, porPessoaId, em: 'x', emISO: '2026-11-04T00:00:00Z',
+    cargoPretendido: 'x', relato: 'x', status: 'recebida', avaliacoesNaIndicacao: [], historico: [], lidasPor: {}, parecerIA: null, ...(org ? { organizacaoId: org } : {}) });
+  L.push(ind('i1', 'GOLDEN', 'Supervisor de Governança Teste', 'SUP'), ind('i2', 'BRANO', 'SUPERVISOR BRANO TESTE', 'BR3'), ind('i3', null, 'Supervisor de Governança Teste', 'SUP'));
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); irPara('indicacoes')");
+  const ids = () => [...window.document.querySelectorAll('[data-ind]')].map(b => b.dataset.ind).sort();
+  igual(ids(), ['i1'], 'i3 sem organização conta como HOTEL LAGHETTO GOLDEN, que não existe na fixture');
+  assert.match(window.document.querySelector('#ind-alerta').textContent, /^2 colaboradores/, 'i1 e i2: todas as organizações que o RH alcança');
+  window.eval("trocarOrganizacao('BRANO')");
+  igual(ids(), ['i2']);
+  // avaliador acima do líder, pelas atuações: GG acima de SUP
+  window.eval("LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|GG|1','RH'); reconstruirViews(); document.querySelector('#trocar').click(); entrar({nome:'Gerente Geral Teste', cargo:'GG', papel:'avaliador', nivel:'N4'}); irPara('indicacoes')");
+  igual(ids(), ['i1'], 'GG vê a indicação da supervisora que ele avalia no Golden');
+  void S;
 });
