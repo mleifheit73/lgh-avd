@@ -40,7 +40,7 @@ test('página: tabela de equivalência é carregada por fetch e passada à carga
 
 test('página: seletor de organização no topo, com marcador e contagem; trocar reconstrói a visão e redesenha a tela', async () => {
   const { S, window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  window.eval("entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})");
   const sel = document.querySelector('#org-seletor');
   assert.ok(sel && !sel.hidden);
   const ops = [...sel.options].map(o => o.textContent);
@@ -49,6 +49,10 @@ test('página: seletor de organização no topo, com marcador e contagem; trocar
   assert.ok(document.querySelector('#org-empresa'));
   window.irPara('matriz');
   assert.equal(document.querySelectorAll('#m-tabela tbody tr').length, 10);
+  /* I1 (R12): o RH da unidade só tem a sua no seletor; a troca de organização se testa com o RH regional */
+  assert.deepEqual([...sel.options].map(o => o.value), ['GOLDEN']);
+  window.eval("entrar({nome:'Teste Regional', cargo:'RH', papel:'rh_regional', nivel:'N5'})");
+  window.irPara('matriz');
   sel.value = 'BRANO'; sel.dispatchEvent(new window.Event('change'));
   assert.equal(S.organizacaoSelecionada, 'BRANO');
   igual(window.eval('PESSOAS').map(p => p.id).sort(), ['ANA', 'BR2', 'BR3']);
@@ -76,7 +80,7 @@ test('página: avaliador só vê no seletor as organizações onde tem atuação
 
 test('Matriz renderiza só a organização selecionada e mostra o rótulo de origem', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  S.perfil = { papel: 'rh_unidade', nome: 'RH Teste' }; window.irPara('matriz');
+  S.perfil = { papel: 'rh_unidade', nome: 'RH Teste', escopo: 'Golden' }; window.irPara('matriz');
   const linhas = [...document.querySelectorAll('#m-tabela tbody tr')];
   assert.equal(linhas.length, 10);
   assert.ok([...document.querySelectorAll('#m-tabela thead th')].some(th => th.textContent === 'Origem do vínculo'));
@@ -90,7 +94,7 @@ test('Matriz renderiza só a organização selecionada e mostra o rótulo de ori
 
 test('Matriz: adicionar avaliador grava em S.atuacoes, o segundo cria outra atuação, Desfazer volta', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})"); window.irPara('matriz');
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})"); window.irPara('matriz');
   const linha = () => [...document.querySelectorAll('#m-tabela tbody tr')].find(tr => /COZINHEIRO UM TESTE/.test(tr.textContent));
   let sel = linha().querySelector('select.add-av');
   assert.ok([...sel.options].some(o => o.value === 'GOLDEN|SUP|1'), 'a lista de líderes é de atuações com podeLiderar');
@@ -113,7 +117,7 @@ test('Matriz: adicionar avaliador grava em S.atuacoes, o segundo cria outra atua
 
 test('Matriz: remover avaliador pelo chip e editar setor e situação gravam nas atuações', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})"); window.irPara('matriz');
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})"); window.irPara('matriz');
   const linha = () => [...document.querySelectorAll('#m-tabela tbody tr')].find(tr => /Camareira Teste/.test(tr.textContent));
   linha().querySelector('[data-rm]').click();
   assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|CAM|1').superiorId, null);
@@ -126,7 +130,7 @@ test('Matriz: remover avaliador pelo chip e editar setor e situação gravam nas
 
 test('Matriz: lote define o mesmo avaliador para os filtrados e respeita a raiz', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})"); window.irPara('matriz');
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})"); window.irPara('matriz');
   const fs = document.querySelector('#f-setor'); fs.value = 'Sem setor'; fs.dispatchEvent(new window.Event('change'));
   const n = window.eval('S.filtrados.length');
   assert.ok(n >= 3);
@@ -154,7 +158,7 @@ test('chave da avaliação separa as duas atuações da mesma pessoa e as duas a
   S.colab = a2; const k2 = window.chaveAval();
   assert.notEqual(k1, k2); assert.match(k1, /\|colab$/);
   assert.equal(k1, 'GOLDEN|CAM|1|colab');
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})");
   const enviar = (atuacaoId, nota) => window.eval(`
     S.colab = colabPorAtuacao('${atuacaoId}'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
     FORMS.colab.pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = ${nota}; S.obs[i+'.'+j] = 'fato observado'; }));
@@ -186,7 +190,7 @@ test('Painel do avaliador: uma linha por atuação; a mesma pessoa duas vezes so
 
 test('Painel do RH conta a organização selecionada e usa o nome dela', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})");
   window.irPara('rh');
   const kpis = document.querySelector('#rh-kpis').textContent;
   assert.match(kpis, /10\s*Colaboradores/);
@@ -211,7 +215,7 @@ test('Usuários: a coluna Nível é calculada (nivelDe), n/d quando não há pos
 
 test('Evolução lista por atuação e lê ENVIADAS pela atuação', async () => {
   const { document, window } = await carregarPagina(base(), pilotoDuplo(), null, OPCOES);
-  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'});
     S.colab = colabPorAtuacao('GOLDEN|CAM|1'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
     FORMS.colab.pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = 5; S.obs[i+'.'+j] = 'fato'; }));
     salvarAvaliacao();`);
@@ -240,6 +244,10 @@ test('base real: Golden selecionado por padrão, Matriz só com o Golden, nunca 
   assert.equal(linhas, n);
   assert.ok(n < baseReal.pessoas.length / 4, `a Matriz tem ${n} linhas de ${baseReal.pessoas.length} pessoas`);
   window.irPara('rh');
+  /* I1 (R12): a Jaqueline (RH da unidade, escopo Hotel Laghetto Golden) só tem o Golden; a troca se mede com a holding */
+  assert.equal(window.eval('JSON.stringify(organizacoesVisiveis().map(o=>o.id))'), '["HOTEL LAGHETTO GOLDEN"]');
+  assert.throws(() => window.eval("trocarOrganizacao('LAGHETTO CORPORATIVO')"), /não existe ou não está no escopo/);
+  window.eval("entrar(USUARIOS.find(u=>u.nome==='Christine Gehring'))");
   const t2 = Date.now(); window.eval("trocarOrganizacao('LAGHETTO CORPORATIVO')"); const tTroca = Date.now() - t2;
   window.eval("entrar(USUARIOS.find(u=>u.nome==='Rafael Schmeier Nunes'))");
   const meus = document.querySelectorAll('#av-equipes tbody tr').length;

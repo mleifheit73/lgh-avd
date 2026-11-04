@@ -145,7 +145,7 @@ test('dados reais: o Golden de hoje não abre ciclo', { skip: !temDadosReais }, 
 
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN', atuacoesExtras: corporativo() };
 const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
-const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
 async function abrir(login = ADMIN, opcoes = OPCOES) {
   const r = await carregarPagina(base(), piloto(), null, opcoes);
   r.window.eval(login); r.window.irPara('ciclos');

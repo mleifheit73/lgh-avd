@@ -68,7 +68,7 @@ test('visiveis para avaliador é só a equipe dele na organização selecionada'
 });
 
 test('visiveis para RH e admin é a organização selecionada, nunca a rede inteira', () => {
-  const S = estadoFalso({ perfil: { papel: 'rh_unidade' } });
+  const S = estadoFalso({ perfil: { papel: 'rh_unidade', escopo: 'Golden' } });
   assert.equal(visiveis(S).some(p => p.id === 'CEO-REDE' || p.id === 'BR2'), false);
   assert.equal(visiveis(S).length, 10);
   S.perfil = { papel: 'admin' };
@@ -179,8 +179,22 @@ test('selecionarOrganizacao reconstrói as visões; organizacoesVisiveis restrin
   S.perfil = { papel: 'avaliador', pessoaId: 'ANA' };
   assert.deepEqual(organizacoesVisiveis(S).map(o => o.id), ['BRANO', 'GOLDEN']);
   assert.throws(() => selecionarOrganizacao(S, 'LAGHETTO CORPORATIVO'), e => e.codigo === 'organizacao_fora_do_escopo');
-  S.perfil = { papel: 'rh_unidade' };
-  assert.equal(organizacoesVisiveis(S).length, 3);
+  /* I1 (R12): RH da unidade só vê a da sua unidade (perfil.unidade, senão perfil.escopo, pelo nome normalizado) */
+  S.perfil = { papel: 'rh_unidade', escopo: 'Golden' };
+  assert.deepEqual(organizacoesVisiveis(S).map(o => o.id), ['GOLDEN']);
+  S.perfil = { papel: 'rh_unidade', unidade: '  golden ', escopo: 'BRANO' };
+  assert.deepEqual(organizacoesVisiveis(S).map(o => o.id), ['GOLDEN'], 'unidade tem precedência sobre escopo; caixa e espaços não importam');
+  assert.throws(() => selecionarOrganizacao(S, 'BRANO'), e => e.codigo === 'organizacao_fora_do_escopo');
+  assert.equal(selecionarOrganizacao(S, 'GOLDEN').organizacaoId, 'GOLDEN');
+  S.perfil = { papel: 'rh_unidade', escopo: 'Unidade' };
+  assert.deepEqual(organizacoesVisiveis(S), [], 'unidade que não casa com nenhuma organização: nada, nunca a rede');
+  S.organizacaoSelecionada = 'GOLDEN';
+  assert.deepEqual(visiveis(S), [], 'mesmo com a organização selecionada à força, a lista sai vazia');
+  S.perfil = { papel: 'rh_unidade', escopo: 'EMPRESA EQUIVALENTE TESTE' };
+  S.equivalencias = [{ empresa: 'Empresa Equivalente Teste', organizacaoId: 'BRANO' }];
+  assert.deepEqual(organizacoesVisiveis(S).map(o => o.id), ['BRANO'], 'sem casamento direto, a tabela de equivalência');
+  S.perfil = { papel: 'rh_regional' };
+  assert.equal(organizacoesVisiveis(S).length, 3, 'RH regional vê todas enquanto a base não traz regional');
 });
 
 test('colabDe carrega a atuação avaliada; atuacoesVisiveis é por atuação', () => {

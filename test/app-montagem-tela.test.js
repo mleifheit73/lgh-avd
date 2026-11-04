@@ -18,7 +18,7 @@ const idDe = (S, pessoa, org = 'GOLDEN') => S.atuacoes.find(a => a.pessoaRef ===
 /* ================= tela ================= */
 
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN' };
-const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
 const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
 const REGIONAL = "entrar({nome:'Teste Regional', cargo:'RH', papel:'rh_regional', nivel:'N5'})";
 const caixa = (document, id) => [...document.querySelectorAll('#ar-arvore .ar-caixa, #ar-sem-lider .ar-caixa')].find(c => c.dataset.atuacao === id);
@@ -249,4 +249,45 @@ test('Rede vazia (Tarefa 9): o admin escolhe a raiz corporativa no painel; a rai
   const u = await abrir([], RH);
   escolher(u.window, u.document, '#ar-org', CORP);
   assert.equal(u.document.querySelectorAll('#ar-pool input[type=radio]').length, 0, 'RH da unidade não escolhe a raiz corporativa');
+});
+
+/* ================= I1 (R12): RH da unidade só vê e só edita a sua ================= */
+
+test('I1: RH da unidade vê só a sua organização nos seletores do topo, da Árvore e das Pendências; BRANO é recusada', async () => {
+  const { window, document, S, erros } = await abrir();
+  const valores = sel => [...document.querySelector(sel).options].map(o => o.value);
+  assert.deepEqual(valores('#org-seletor'), ['GOLDEN']);
+  assert.deepEqual(valores('#ar-org'), ['GOLDEN']);
+  window.irPara('pendencias');
+  assert.deepEqual(valores('#pe-org'), ['GOLDEN']);
+  assert.throws(() => window.eval("trocarOrganizacao('BRANO')"), (e) => e.codigo === 'organizacao_fora_do_escopo');
+  assert.throws(() => window.eval("selecionarOrganizacao(S, 'BRANO')"), (e) => e.codigo === 'organizacao_fora_do_escopo');
+  assert.throws(() => window.eval(`selecionarOrganizacao(S, '${CORP}')`), (e) => e.codigo === 'organizacao_fora_do_escopo');
+  assert.equal(S.organizacaoSelecionada, 'GOLDEN');
+  /* a fila de pendências da tela não oferece BRANO nem a Rede */
+  assert.ok(!document.querySelector('#pe-org').innerHTML.includes('BRANO'));
+  assert.deepEqual(erros.map(String), []);
+});
+
+test('I1: RH da unidade sem unidade que case com uma organização não vê nenhuma (nunca herda a de antes)', async () => {
+  const { window, document, S } = await abrir(null, "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Unidade inexistente'})");
+  assert.equal(S.organizacaoSelecionada, null);
+  assert.equal(window.eval('PESSOAS.length'), 0);
+  assert.match(document.querySelector('#org-seletor').textContent, /Nenhuma organização no seu escopo/);
+});
+
+test('I1: RH da unidade com uma organização fora do escopo forçada no estado: o painel de montagem não oferece ação', async () => {
+  const { window, document, S } = await abrir();
+  S.organizacaoSelecionada = 'BRANO'; window.eval('reconstruirViews()'); window.irPara('arvore');
+  const br = idDe(S, 'BR2', 'BRANO');
+  document.dispatchEvent(new window.CustomEvent('lgh-arvore-selecionada', { detail: { atuacaoId: br } }));
+  const p = painel(document);
+  assert.match(p.textContent, /Somente leitura/);
+  assert.equal(p.querySelectorAll('[data-acao]').length, 0, 'nenhum botão de ação fora do escopo');
+  assert.equal(window.eval('visiveis().length'), 0, 'o adaptador também não lista ninguém fora do escopo');
+});
+
+test('I1: RH regional continua vendo todas as organizações', async () => {
+  const { document } = await abrir(null, REGIONAL);
+  assert.deepEqual([...document.querySelector('#org-seletor').options].map(o => o.value).sort(), ['BRANO', 'GOLDEN', CORP].sort());
 });

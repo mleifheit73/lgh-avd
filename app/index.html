@@ -897,6 +897,9 @@ function entrar(u){
   if(orgs.length && !orgs.some(o=>o.id===S.organizacaoSelecionada)){
     const supervisiona = pid ? orgs.find(o=>LGH.avaliadosDe(S, pid, o.id).length) : null;
     selecionarOrganizacao(S, (supervisiona || orgs[0]).id);
+  } else if(!orgs.length){
+    /* I1: perfil sem nenhuma organização no escopo não herda a organização de quem entrou antes */
+    S.organizacaoSelecionada = null; reconstruirViews();
   }
   S.lidUnidade = nomeOrganizacao();
   pintarSeletorOrg();
@@ -2084,6 +2087,7 @@ async function boot(){
   let equivalencias = [];
   try{ const re = await fetch('js/modelo/equivalencia-organizacoes.json'); if(re.ok){ const t = await re.json(); if(Array.isArray(t)) equivalencias = t; } }catch(e){}
   S.piloto = piloto;
+  S.equivalencias = equivalencias;   /* I1: o escopo do RH da unidade casa a unidade do perfil pela mesma tabela */
   S.pessoas = S.base.pessoas;
   S.pessoasPorId = new Map(S.pessoas.map(p=>[p.id, p]));
   const organizacaoPiloto = cfg.organizacaoPiloto || LGH.ORGANIZACAO_PILOTO;
@@ -3424,7 +3428,9 @@ Regras:
   for(const r of [{k:'editarCorporativo', n:'Editar estrutura corporativa', p:['admin']},
                   {k:'definirRaiz', n:'Definir raiz da unidade', p:['admin']}])
     if(!RECURSOS.some(x=>x.k===r.k)) RECURSOS.push(r);
-  const editavel = org => org === CORP ? pode('editarCorporativo') : pode('definirAvaliador');
+  /* I1 (R12): além do papel, a organização precisa estar no escopo do perfil (RH da unidade só edita a sua) */
+  const noEscopo = org => organizacoesVisiveis().some(o=>o.id===org);
+  const editavel = org => noEscopo(org) && (org === CORP ? pode('editarCorporativo') : pode('definirAvaliador'));
 
   /* ---- layout: árvore e painel lado a lado; o #ar-pool da Tarefa 4 passa a morar no painel ---- */
   const semLider = sec.querySelector('#ar-sem-lider');

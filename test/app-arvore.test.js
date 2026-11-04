@@ -10,7 +10,7 @@ const CORP = 'LAGHETTO CORPORATIVO';
 const base = () => lerFixture('base-mini.json');
 const piloto = () => lerFixture('piloto-mini.json');
 const pilotoDuplo = () => { const p = piloto(); p['CAMAREIRA TESTE'].avaliadores = ['SUPERVISOR DE GOVERNANCA TESTE', 'GERENTE GERAL TESTE']; return p; };
-const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
 const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
 const correntes = (S, org) => JSON.parse(JSON.stringify(S.atuacoes)).filter(a => a.organizacaoId === org && a.situacao === 'ativa' && a.fim == null);
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
@@ -66,7 +66,7 @@ test('Árvore da unidade: medidor bate com resumoOrganizacao, toda atuação tem
 
 test('Árvore: trocar de organização re-renderiza, e os dois seletores andam juntos', async () => {
   const { window, document, S } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval(RH); window.irPara('arvore');
+  window.eval(REGIONAL); window.irPara('arvore');   /* I1 (R12): o RH da unidade só tem a sua; quem troca é o regional */
   escolher(window, document, '#ar-org', 'BRANO');
   assert.equal(S.organizacaoSelecionada, 'BRANO');
   assert.equal(document.querySelector('#org-seletor').value, 'BRANO');

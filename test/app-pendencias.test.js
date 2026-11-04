@@ -203,7 +203,7 @@ test('dados reais: contagem por código na rede e no Golden', { skip: !temDadosR
 /* ================= tela ================= */
 
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN', atuacoesExtras: corporativo() };
-const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
 const AVALIADOR = "entrar({nome:'Supervisor de Governança Teste', cargo:'Supervisor', papel:'avaliador', nivel:'N1'})";
 const ADMIN = "entrar({nome:'Teste Holding', cargo:'RH', papel:'admin', nivel:'N6'})";
 async function abrir(login = RH, tela = 'pendencias', opcoes = OPCOES) {

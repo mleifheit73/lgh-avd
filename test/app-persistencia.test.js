@@ -205,7 +205,7 @@ test('dados reais: 50 operações no Golden, round-trip e documento do Golden ab
 /* ================= página no jsdom, com banco falso ================= */
 
 const OPCOES = { fusoes: FUSAO_MINI, organizacaoPiloto: 'GOLDEN' };
-const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4'})";
+const RH = "entrar({nome:'Teste RH', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})";
 const tick = (ms = 60) => new Promise(r => setTimeout(r, ms));
 const caixa = (document, id) => [...document.querySelectorAll('#ar-arvore .ar-caixa, #ar-sem-lider .ar-caixa')].find(c => c.dataset.atuacao === id);
 const checks = document => [...document.querySelectorAll('#ar-pool input[type=checkbox][data-pool]')];

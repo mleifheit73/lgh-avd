@@ -169,7 +169,7 @@ export function avaliadosDe(S, pessoaId, organizacaoId) {
 
 /** Atuações que o perfil logado alcança na organização selecionada. Avaliador: só as que ele supervisiona. */
 export function atuacoesVisiveis(S) {
-  if (!S.perfil || !S.organizacaoSelecionada) return [];
+  if (!S.perfil || !S.organizacaoSelecionada || !noEscopo(S, S.organizacaoSelecionada)) return [];
   if (S.perfil.papel === 'avaliador') {
     const pid = pessoaDoPerfil(S);
     return pid ? avaliadosDe(S, pid, S.organizacaoSelecionada) : [];
@@ -179,7 +179,7 @@ export function atuacoesVisiveis(S) {
 
 /** Pessoas que o perfil logado alcança. Nunca a rede inteira: sempre dentro da organização selecionada (Review Focus 1). */
 export function visiveis(S) {
-  if (!S.perfil || !S.organizacaoSelecionada) return [];
+  if (!S.perfil || !S.organizacaoSelecionada || !noEscopo(S, S.organizacaoSelecionada)) return [];
   if (S.perfil.papel === 'avaliador') {
     const ids = [...new Set(atuacoesVisiveis(S).map(a => a.pessoaRef))];
     return ids.map(id => pessoaNaOrganizacao(S, id, S.organizacaoSelecionada)).filter(Boolean)
@@ -257,7 +257,28 @@ export function nivelDe(S, pessoaId, papel) {
   return melhor < 0 ? null : NIVEIS[melhor];
 }
 
-/** Organizações que o perfil pode escolher. Avaliador: só onde tem atuação corrente. */
+/**
+ * Organizações do escopo do RH da unidade (R12): a unidade do perfil (perfil.unidade; sem ela, perfil.escopo, que na lista de
+ * usuários da v34 traz o nome do hotel) casada pelo nome normalizado com o nome ou o id da organização, nas duas normalizações
+ * da carga (normalizarNome de nome.js e chaveEmpresa); sem casamento direto, a tabela de equivalência de organizações
+ * (S.equivalencias: empresa -> organizacaoId, a mesma que a carga usa). Nada casa: lista vazia (sem acesso, nunca a rede).
+ */
+export function organizacoesDaUnidade(S, perfil = S.perfil) {
+  const alvo = perfil ? String(perfil.unidade || perfil.escopo || '').trim() : '';
+  if (!alvo) return [];
+  const todas = S.organizacoes || [];
+  const n = normalizarNome(alvo), k = chaveEmpresa(alvo);
+  const casa = o => [o.nome, o.id].some(x => normalizarNome(x) === n || (k && chaveEmpresa(x) === k));
+  const diretas = todas.filter(casa);
+  if (diretas.length) return diretas;
+  const linha = (S.equivalencias || []).find(e => normalizarNome(e.empresa) === n || (k && chaveEmpresa(e.empresa) === k));
+  return linha ? todas.filter(o => o.id === linha.organizacaoId) : [];
+}
+
+/**
+ * Organizações que o perfil pode escolher. Avaliador: só onde tem atuação corrente. RH da unidade: só a da sua unidade (R12,
+ * organizacoesDaUnidade). RH regional e holding: todas (R12: a base pública ainda não traz regional).
+ */
 export function organizacoesVisiveis(S) {
   const todas = S.organizacoes || [];
   if (S.perfil && S.perfil.papel === 'avaliador') {
@@ -265,8 +286,15 @@ export function organizacoesVisiveis(S) {
     const minhas = new Set((S.atuacoes || []).filter(a => a.pessoaRef === pid && ehCorrente(a)).map(a => a.organizacaoId));
     return todas.filter(o => minhas.has(o.id));
   }
+  if (S.perfil && S.perfil.papel === 'rh_unidade') {
+    const minhas = new Set(organizacoesDaUnidade(S).map(o => o.id));
+    return todas.filter(o => minhas.has(o.id));
+  }
   return todas;
 }
+
+/** A organização está entre as que o perfil pode escolher? (I1: visiveis e atuacoesVisiveis também conferem, além de selecionarOrganizacao.) */
+function noEscopo(S, organizacaoId) { return organizacoesVisiveis(S).some(o => o.id === organizacaoId); }
 
 /** Organização inicial: a do piloto, se existir; senão a primeira unidade; senão a primeira. */
 export function organizacaoInicial(S, preferida) {

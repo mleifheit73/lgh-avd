@@ -25,7 +25,7 @@ test('banco: avaliação enviada vira documento avaliacoes/<atuacaoId:tipo> com 
   }) };
   const { window } = await carregarPagina(base(), pilotoDuplo(), stub, OPCOES);
   await tick(60);
-  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'});
     S.colab = colabPorAtuacao('GOLDEN|CAM|2'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
     FORMS.colab.pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = 3; S.obs[i+'.'+j] = 'fato'; }));
     salvarAvaliacao();`);
@@ -38,7 +38,7 @@ test('banco: avaliação enviada vira documento avaliacoes/<atuacaoId:tipo> com 
 
 test('gaveta do avaliador e visão por ciclo mostram só a atuação daquela linha', async () => {
   const { document, S, window } = await carregarPagina(base(), pilotoDuplo(), null, OPCOES);
-  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'});
     S.colab = colabPorAtuacao('GOLDEN|CAM|2'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
     FORMS.colab.pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = 2; S.obs[i+'.'+j] = 'fato'; }));
     salvarAvaliacao(); document.querySelector('#trocar').click();`);
@@ -64,7 +64,7 @@ test('gaveta do avaliador e visão por ciclo mostram só a atuação daquela lin
 
 test('bloco LID: marcar líder na Matriz grava podeLiderar na atuação e o formulário segue a atuação', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})"); window.irPara('matriz');
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})"); window.irPara('matriz');
   const linha = [...document.querySelectorAll('#m-tabela tbody tr')].find(tr => /COZINHEIRO UM TESTE/.test(tr.textContent));
   const chk = linha.querySelector('[data-lid]'); chk.checked = true; chk.dispatchEvent(new window.Event('change'));
   assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|COZ1|1').podeLiderar, true);
@@ -118,7 +118,7 @@ test('bloco FIX: guarda de saída com nota digitada; ficar mantém, sair descart
 
 test('bloco FORM: envio grava a versão do formulário na chave da atuação (teste-form da v34)', async () => {
   const { window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'});
     S.colab = colabPorAtuacao('GOLDEN|SUP|1'); irPara('form'); S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
     FORMS[S.tipo].pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ S.notas[i+'.'+j] = 4; S.obs[i+'.'+j] = 'fato'; }));
     salvarAvaliacao();`);
@@ -137,7 +137,8 @@ test('todas as telas abrem sem erro e sem turno nas visões (teste-v29 da v34)',
 
 test('trocar a organização com nota digitada não leva a nota para outra pessoa', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); S.colab = colabPorAtuacao('GOLDEN|CAM|1'); irPara('form')");
+  /* I1 (R12): troca de organização com o RH regional (o da unidade só tem a sua) */
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_regional', nivel:'N5'}); S.colab = colabPorAtuacao('GOLDEN|CAM|1'); irPara('form')");
   const nota = document.querySelector('input.nota'); nota.value = '4'; nota.dispatchEvent(new window.Event('input', { bubbles: true }));
   assert.equal(Object.keys(S.notas).length, 1);
   window.eval("trocarOrganizacao('BRANO')");
@@ -149,7 +150,7 @@ test('trocar a organização com nota digitada não leva a nota para outra pesso
 
 test('R16 na página: atuação desfeita não devolve o id; a nova não herda a avaliação', async () => {
   const { S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'})");
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'})");
   const criar = () => window.eval("tentarMudar('x', ()=>LGH.definirSuperior(S,'GOLDEN|CAM|1','GOLDEN|GG|1','RH')).valor.atuacao.id");
   assert.equal(criar(), 'GOLDEN|CAM|2');
   window.eval(`S.colab = colabPorAtuacao('GOLDEN|CAM|2'); S.tipo = 'colab'; S.notas = {}; S.obs = {}; S.confirmaEnvio = true;
@@ -178,7 +179,7 @@ test('R16 na página: id de atuação que só existe numa chave do banco fica re
 
 test('lote com uma pessoa recusada: as atuações dela ficam exatamente como estavam, as outras recebem', async () => {
   const { S, window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'});
+  window.eval(`entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'});
     LGH.marcarLider(S,'GOLDEN|DUPLO-VINCULO|1',true);   /* R20: DUPLO não lidera na fixture; o gerente geral é raiz e já nasce líder (R23) */
     window.__prep = [LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|GG|1','RH').ok, LGH.definirSuperior(S,'GOLDEN|SUP|1','GOLDEN|DUPLO-VINCULO|1','RH').ok];
     LGH.marcarLider(S,'GOLDEN|CAM|1',true); reconstruirViews(); irPara('matriz');`);
@@ -194,7 +195,7 @@ test('lote com uma pessoa recusada: as atuações dela ficam exatamente como est
 
 test('Matriz: avaliação mútua pela tela é recusada com mensagem e sem passo no Desfazer', async () => {
   const { S, window, document } = await carregarPagina(base(), piloto(), null, OPCOES);
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); LGH.marcarLider(S,'GOLDEN|CAM|1',true); reconstruirViews(); irPara('matriz')");
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4', escopo:'Golden'}); LGH.marcarLider(S,'GOLDEN|CAM|1',true); reconstruirViews(); irPara('matriz')");
   const n = window.eval('HIST.length');
   const linha = [...document.querySelectorAll('#m-tabela tbody tr')].find(tr => tr.querySelector('td b').textContent === 'Supervisor de Governança Teste');
   const sel = linha.querySelector('select.add-av'); sel.value = 'GOLDEN|CAM|1'; sel.dispatchEvent(new window.Event('change'));
@@ -209,7 +210,8 @@ test('R18: indicação tem organização; RH vê na lista só a do topo, o alert
   const ind = (id, org, por, porPessoaId) => ({ id, pessoaId: 'CAM', pessoaNome: 'x', cargoAtual: 'x', setor: 'x', unidade: 'x', por, porPessoaId, em: 'x', emISO: '2026-11-04T00:00:00Z',
     cargoPretendido: 'x', relato: 'x', status: 'recebida', avaliacoesNaIndicacao: [], historico: [], lidasPor: {}, parecerIA: null, ...(org ? { organizacaoId: org } : {}) });
   L.push(ind('i1', 'GOLDEN', 'Supervisor de Governança Teste', 'SUP'), ind('i2', 'BRANO', 'SUPERVISOR BRANO TESTE', 'BR3'), ind('i3', null, 'Supervisor de Governança Teste', 'SUP'));
-  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_unidade', nivel:'N4'}); irPara('indicacoes')");
+  /* I1 (R12): o RH regional alcança todas; o da unidade, só a sua (testes I1 em app-montagem-tela.test.js) */
+  window.eval("entrar({nome:'RH Teste', cargo:'RH', papel:'rh_regional', nivel:'N5'}); irPara('indicacoes')");
   const ids = () => [...window.document.querySelectorAll('[data-ind]')].map(b => b.dataset.ind).sort();
   igual(ids(), ['i1'], 'i3 sem organização conta como HOTEL LAGHETTO GOLDEN, que não existe na fixture');
   assert.match(window.document.querySelector('#ind-alerta').textContent, /^2 colaboradores/, 'i1 e i2: todas as organizações que o RH alcança');
