@@ -24,6 +24,8 @@ function estadoFalso({ pil = piloto(), extras = lerFixture('atuacoes-corporativo
 }
 const ids = l => l.map(x => x.id).sort();
 const pick = r => ({ ok: r.ok, codigo: r.codigo });
+/** Chamada de preparação que precisa dar certo: falhando, o teste para aqui em vez de passar vazio. */
+const certo = r => { assert.equal(r.ok, true, `preparação recusada: ${r.codigo}`); return r; };
 
 /* ================= adaptador puro, no Node ================= */
 
@@ -89,8 +91,8 @@ test('nivelDe deriva da posição: supervisora N1, gerente geral N4, diretor reg
   assert.equal(nivelDe(S, 'SUP'), 'N1'); assert.equal(nivelDe(S, 'GG'), 'N4');
   assert.equal(nivelDe(S, 'DR'), 'N5'); assert.equal(nivelDe(S, 'CEO-REDE'), 'N6'); assert.equal(nivelDe(S, 'CAM'), null);
   assert.equal(nivelDe(S, 'CAM', 'admin'), 'N6', 'RH da holding é N6 pelo papel');
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) marcarLider(S, id, true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
-  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH TESTE');   // DUPLO passa a ter um líder abaixo
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
+  certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH TESTE'));   // DUPLO passa a ter um líder abaixo
   assert.equal(nivelDe(S, 'DUPLO-VINCULO'), 'N2');
 });
 
@@ -105,7 +107,7 @@ test('definirSuperior: sem superior passa a ter, com origem definido e autor', (
 
 test('definirSuperior: segundo superior cria a segunda atuação (D14); o mesmo superior de novo não muda nada', () => {
   const S = estadoFalso();
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) marcarLider(S, id, true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
   const r = definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH TESTE', '2026-11-04');
   assert.equal(r.acao, 'criada'); assert.equal(r.atuacao.id, 'GOLDEN|CAM|2');
   assert.equal(r.atuacao.superiorId, 'GOLDEN|GG|1'); assert.equal(r.atuacao.origem, 'definido'); assert.equal(r.atuacao.funcao, 'CAMAREIRA');
@@ -129,10 +131,10 @@ test('definirSuperior recusa raiz, a própria pessoa, outra organização e cicl
 
 test('removerSuperior: com duas atuações encerra uma e passa os subordinados; a última volta ao pool', () => {
   const S = estadoFalso();
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) marcarLider(S, id, true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
-  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
-  const segunda = definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH').atuacao;   // SUP|2 sob DUPLO
-  definirSuperior(S, 'GOLDEN|COZ1|1', segunda.id, 'RH');                                       // COZ1 sob SUP|2
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
+  certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH'));
+  const segunda = certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH')).atuacao;   // SUP|2 sob DUPLO
+  certo(definirSuperior(S, 'GOLDEN|COZ1|1', segunda.id, 'RH'));                                     // COZ1 sob SUP|2
   const r = removerSuperior(S, segunda.id, 'RH', '2026-11-04');
   assert.equal(r.acao, 'encerrada');
   assert.equal(segunda.fim, '2026-11-04'); assert.notEqual(segunda.situacao, 'ativa');
@@ -230,9 +232,9 @@ test('R15: removerSuperior que criaria ciclo é desfeito inteiro (estado mútuo 
 
 test('R15: removerSuperior na primeira atuação com uma segunda existente mantém a árvore válida', () => {
   const S = estadoFalso();
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) marcarLider(S, id, true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
-  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
-  const sup2 = definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH').atuacao;
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
+  certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH'));
+  const sup2 = certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH')).atuacao;
   const r = removerSuperior(S, 'GOLDEN|SUP|1', 'RH');
   assert.equal(r.ok, true); assert.equal(r.acao, 'encerrada');
   assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|CAM|1').superiorId, sup2.id, 'a camareira passa para a atuação que fica');
@@ -241,30 +243,33 @@ test('R15: removerSuperior na primeira atuação com uma segunda existente mant�
 
 test('R15: escrita em organização sem raiz (sem_raiz já vinha da carga) continua permitida', () => {
   const S = estadoFalso();
-  marcarLider(S, 'BRANO|BR3|1', true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
+  marcarLider(S, 'BRANO|BR3|1', true);   // R20: só líder recebe subordinado; BR3 não lidera na fixture
   const r = definirSuperior(S, 'BRANO|BR2|1', 'BRANO|BR3|1', 'RH');
   assert.equal(r.ok, true);
 });
 
 test('R16: id de atuação nunca se repete, nem depois de desfeito', () => {
   const S = estadoFalso();
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) marcarLider(S, id, true);   // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
   const snap = JSON.parse(JSON.stringify(S.atuacoes));
-  const a = definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH').atuacao;
+  const a = certo(definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH')).atuacao;
   assert.equal(a.id, 'GOLDEN|CAM|2');
   S.atuacoes = snap;                                  // desfazer como a página faz: troca S.atuacoes, mantém S.idsUsados
-  const b = definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH').atuacao;
+  const b = certo(definirSuperior(S, 'GOLDEN|CAM|1', 'GOLDEN|GG|1', 'RH')).atuacao;
   assert.equal(b.id, 'GOLDEN|CAM|3');
 });
 
 test('definirUnicoSuperior recusado não deixa mudança parcial (atuações extras não são encerradas)', () => {
   const S = estadoFalso();
-  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
-  definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH');   // SUP com duas atuações
+  marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
+  certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH'));
+  certo(definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH'));   // SUP com duas atuações
+  assert.equal(atuacoesDe(S.atuacoes, 'SUP').length, 2, 'premissa: SUP tem duas atuações');
   marcarLider(S, 'GOLDEN|CAM|1', true);
   const antes = JSON.stringify(S.atuacoes);
   const r = definirUnicoSuperior(S, 'SUP', 'GOLDEN', 'GOLDEN|CAM|1', 'RH');   // a camareira é avaliada por SUP: mútua
   assert.equal(r.ok, false); assert.equal(r.codigo, 'avaliacao_mutua');
   assert.equal(JSON.stringify(S.atuacoes), antes);
-  assert.equal(pick(definirUnicoSuperior(S, 'COZ1', 'GOLDEN', 'GOLDEN|GG|1', 'RH')).codigo, 'superior_sem_marca_de_lider');
+  assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|GAR1|1').podeLiderar, false, 'premissa: o garçom não lidera');
+  assert.equal(pick(definirUnicoSuperior(S, 'COZ1', 'GOLDEN', 'GOLDEN|GAR1|1', 'RH')).codigo, 'superior_sem_marca_de_lider');
 });

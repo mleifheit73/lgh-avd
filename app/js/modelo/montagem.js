@@ -164,9 +164,12 @@ export function poolRede(S, filtro = {}) {
  * corporativo (criarAtuacaoNaOrganizacao); 'atuacao' recebe o superior (definirSuperior). Uma transação por item.
  * A pessoa de S.semOrganizacao sai do pool porque passa a ter atuação: a lista não é editada, para o Desfazer
  * (que restaura S.atuacoes) devolvê-la ao pool sem perder ninguém.
+ * Função da atuação nova: o cargo da carga. Sem cargo na carga, nada é inventado (regra de ouro): o item é recusado com
+ * sem_funcao, a menos que opcoes.funcao venha preenchida (o RH informa na tela).
  * Devolve { ok, aplicados: [chaves], recusados: [{ chave, codigo }] }.
  */
-export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = hoje()) {
+export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = hoje(), opcoes = {}) {
+  const funcaoInformada = String(opcoes.funcao ?? '').trim();
   const lista = [...new Set(chaves || [])];
   const sup = atuacaoPorId(S, superiorAtuacaoId);
   if (!sup || !ehCorrente(sup)) return { ok: false, codigo: 'atuacao_inexistente', aplicados: [], recusados: [] };
@@ -181,7 +184,7 @@ export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = ho
     const r = item.tipo === 'atuacao'
       ? definirSuperior(S, item.atuacaoId, sup.id, autor, quando)
       : criarAtuacaoNaOrganizacao(S, { pessoaId: item.pessoaId, organizacaoId: ID_CORPORATIVO, superiorAtuacaoId: sup.id,
-        funcao: item.funcao || 'Sem função', autor, quando });
+        funcao: item.funcao || funcaoInformada || null, autor, quando });
     if (r.ok) aplicados.push(chave); else recusados.push({ chave, codigo: r.codigo });
   }
   const ok = aplicados.length > 0 || recusados.length === 0;

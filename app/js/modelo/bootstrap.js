@@ -177,6 +177,20 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencia
   }
   atuacoes.push(...adicionais);
 
+  // 4b. Marca de líder inferida (R23): a raiz e toda atuação que ficou com subordinado lideram, mesmo sem marca no piloto.
+  //     Só atuação marcada como líder recebe subordinado (R20); sem isso a carga entregaria líder sem marca com equipe.
+  const comSubordinado = new Set(atuacoes.map(a => a.superiorId).filter(Boolean));
+  for (const a of atuacoes) {
+    if (a.podeLiderar) continue;
+    if (a.ehRaiz) {
+      a.podeLiderar = true;
+      aviso('lider_inferido_por_raiz', `${a.pessoaRef} é raiz de ${a.organizacaoId}: marcada como líder`, { atuacaoId: a.id });
+    } else if (comSubordinado.has(a.id)) {
+      a.podeLiderar = true;
+      aviso('lider_inferido_por_subordinados', `${a.pessoaRef} tem subordinados em ${a.organizacaoId}: marcada como líder`, { atuacaoId: a.id });
+    }
+  }
+
   // 5. Quem só tem PJ sem correspondência e nenhuma atuação vai para o pool "sem organização".
   const comAtuacao = new Set(atuacoes.map(a => a.pessoaRef));
   const semOrganizacao = [];

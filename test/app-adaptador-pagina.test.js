@@ -84,7 +84,7 @@ test('Matriz renderiza só a organização selecionada e mostra o rótulo de ori
   assert.match(cam.textContent, /Inferido pelo cargo/);
   assert.ok(linhas.some(tr => /Da carga, sem superior/.test(tr.textContent)));
   assert.ok(!linhas.some(tr => /BRANO TESTE|CAMAREIRA BRANO/i.test(tr.textContent) && !/Recepcionista Brano/i.test(tr.textContent)));
-  const gg = linhas.find(tr => /GERENTE GERAL TESTE/.test(tr.textContent));
+  const gg = linhas.find(tr => tr.querySelector('td b').textContent === 'GERENTE GERAL TESTE');   // pelo nome da linha: o seletor de avaliador das outras linhas também cita o gerente geral, que é líder (R23)
   assert.match(gg.textContent, /Raiz da unidade/);
 });
 
@@ -168,10 +168,11 @@ test('chave da avaliação separa as duas atuações da mesma pessoa e as duas a
 test('Painel do avaliador: uma linha por atuação; a mesma pessoa duas vezes sob o mesmo avaliador traz "2ª atuação"', async () => {
   const { document, S, window } = await carregarPagina(base(), piloto(), null, OPCOES);
   // SUP ganha uma segunda atuação (sob DUPLO) e CAM ganha uma segunda atuação sob ela: CAM aparece duas vezes para SUP
-  // R20 (Tarefa 5): só atuação marcada como líder recebe subordinado; a fixture não marca o gerente geral nem DUPLO
-  for (const id of ['GOLDEN|GG|1', 'GOLDEN|DUPLO-VINCULO|1']) window.LGH.marcarLider(S, id, true);
-  window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH');
-  const sup2 = window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH').atuacao;
+  window.LGH.marcarLider(S, 'GOLDEN|DUPLO-VINCULO|1', true);   // R20: só líder recebe subordinado; DUPLO não lidera na fixture (o gerente geral é raiz e já nasce líder, R23)
+  assert.equal(window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|GG|1', 'RH').ok, true);
+  const r2 = window.LGH.definirSuperior(S, 'GOLDEN|SUP|1', 'GOLDEN|DUPLO-VINCULO|1', 'RH');
+  assert.equal(r2.ok, true, r2.codigo);
+  const sup2 = r2.atuacao;
   assert.equal(sup2.id, 'GOLDEN|SUP|2');
   assert.equal(window.LGH.definirSuperior(S, 'GOLDEN|CAM|1', sup2.id, 'RH').atuacao.id, 'GOLDEN|CAM|2');
   window.reconstruirViews();

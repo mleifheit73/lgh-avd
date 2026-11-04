@@ -2398,6 +2398,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
       ? `${p.nome} agora é líder: entra na lista de avaliadores, passa a ser avaliado pelo formulário de líder e ganhou conta de Avaliador (aba Usuários).`
       : `${p.nome} deixou de ser líder. A conta de Avaliador foi desativada.`};
   }
+  window.LGH_LID = { definirLider };   /* R22: o painel de montagem marca líder pelo mesmo caminho da Matriz (conta e banco) */
   const desfazerOriginal = desfazer;
   desfazer = function(){ const r = desfazerOriginal.apply(this, arguments); reconciliarContas('desfazer'); persistir(); return r; };
 
@@ -3405,7 +3406,7 @@ Regras:
   area.append(principal, painel);
 
   /* ---- estado do painel (só da tela, não é dado) ---- */
-  const P = { marcados: new Set(), filtro: {texto:'', cargo:'', setor:''}, selecao: null, org: null };
+  const P = { marcados: new Set(), filtro: {texto:'', cargo:'', setor:''}, selecao: null, org: null, funcao: '' };
   const nomePessoa = pid => LGH.nomeExibicao(S, S.pessoasPorId && S.pessoasPorId.get(pid)) || pid;
   const atuacao = id => (S.atuacoes||[]).find(a=>a.id===id && a.situacao==='ativa' && a.fim==null) || null;
   const plural = (n, um, varios) => `${n} ${n===1?um:varios}`;
@@ -3434,6 +3435,7 @@ Regras:
       nao_inferido: 'Este vínculo já foi definido pelo RH.',
       sem_superior: 'Esta atuação não tem líder para confirmar.',
       fora_do_pool: 'A pessoa já não está no conjunto sem líder.',
+      sem_funcao: `${n} não tem cargo na carga; informe a função.`,
       atuacao_inexistente: 'A atuação não existe mais (foi desfeita ou encerrada).',
       multiplas_raizes: 'Recusado: a organização ficaria com mais de uma raiz.',
       sem_raiz: 'Recusado: a organização ficaria sem raiz.',
@@ -3469,7 +3471,7 @@ Regras:
     if(S.tela !== 'arvore') return;
     const org = S.organizacaoSelecionada;
     const a = selecionada();
-    if(P.org !== org || P.selecao !== (a && a.id)){ P.marcados.clear(); P.org = org; P.selecao = a && a.id; }
+    if(P.org !== org || P.selecao !== (a && a.id)){ P.marcados.clear(); P.funcao = ''; P.org = org; P.selecao = a && a.id; }
     const pode_ = !!org && editavel(org);
     const rede = org === CORP && pode('verRede');
     if(!a){
@@ -3533,6 +3535,7 @@ Regras:
       <ul class="mp-lista" id="ar-pool-lista"></ul>
       <div class="mp-adicionar">
         ${a.podeLiderar ? '' : `<p class="mp-motivo">${esc(nome)} não está marcado como líder. Marque como líder para montar a equipe.</p>`}
+        <div id="ar-funcao-area"></div>
         <button type="button" class="btn" id="ar-adicionar" disabled></button>
       </div>`;
     pool.dataset.lider = a.id;
@@ -3559,11 +3562,23 @@ Regras:
     pool.querySelector('#ar-pool-contagem').textContent = `${plural(itens.length,'pessoa','pessoas')} ${itens.length===1?'listada':'listadas'}`;
     renderBotao(a);
   }
+  /* Rede: marcado sem cargo na carga pede a função (nada é inventado); o campo só é redesenhado quando a lista muda */
+  function semCargoMarcados(){
+    if(S.organizacaoSelecionada !== CORP || !P.marcados.size) return [];
+    return itensPool(CORP, {}).filter(i => P.marcados.has(i.chave) && i.tipo !== 'atuacao' && !i.funcao);
+  }
   function renderBotao(a){
     const n = P.marcados.size, btn = pool.querySelector('#ar-adicionar');
     if(!btn) return;
+    const faltam = semCargoMarcados(), area = pool.querySelector('#ar-funcao-area');
+    const chave = faltam.map(i=>i.chave).join(',');
+    if(area && area.dataset.chave !== chave){
+      area.dataset.chave = chave;
+      area.innerHTML = faltam.length ? `<p class="mp-motivo">${esc(faltam.map(i=>i.nome).join(', '))} não ${faltam.length===1?'tem':'têm'} cargo na carga; informe a função.</p>
+        <input type="text" id="ar-funcao" aria-label="Função na estrutura corporativa" placeholder="Função na estrutura corporativa" value="${esc(P.funcao || '')}">` : '';
+    }
     btn.textContent = `Adicionar ${n} à equipe de ${nomePessoa(a.pessoaRef)}`;
-    btn.disabled = n === 0 || !a.podeLiderar;
+    btn.disabled = n === 0 || !a.podeLiderar || (faltam.length > 0 && !String(P.funcao || '').trim());
   }
   function renderDesfazer(pode_){
     let d = painel.querySelector('.mp-desfazer');
@@ -3572,20 +3587,38 @@ Regras:
     d.innerHTML = `<button type="button" class="btn sec" id="ar-desfazer">Desfazer</button><span>Última alteração: ${esc(HIST[HIST.length-1].desc)}</span>`;
   }
 
+  /* Pessoas (distintas, fora as próprias raízes anteriores) com atuação corrente abaixo das atuações informadas. */
+  function pessoasAbaixo(ids){
+    const filhos = new Map();
+    for(const x of (S.atuacoes||[])) if(x.superiorId && x.situacao==='ativa' && x.fim==null){
+      if(!filhos.has(x.superiorId)) filhos.set(x.superiorId, []); filhos.get(x.superiorId).push(x); }
+    const raizes = new Set(ids.map(id=>{ const r = (S.atuacoes||[]).find(x=>x.id===id); return r && r.pessoaRef; }));
+    const pessoas = new Set(), vistos = new Set(), fila = [...ids];
+    while(fila.length){ const id = fila.shift(); if(vistos.has(id)) continue; vistos.add(id);
+      for(const f of filhos.get(id) || []){ if(!raizes.has(f.pessoaRef)) pessoas.add(f.pessoaRef); fila.push(f.id); } }
+    return pessoas.size;
+  }
+
   /* ---- ações: todas por tentarMudar, então entram no Desfazer; recusa não deixa passo vazio ---- */
   function redesenhar(){ window.LGH_ARVORE.render(); if(typeof atualizarDesfazer === 'function') atualizarDesfazer(); }
   function executar(desc, fn, ctx, okMsg){
     const r = tentarMudar(desc, fn);
     redesenhar();
-    if(!r.ok){ avisar(texto(r.erro && r.erro.codigo, ctx), 'erro'); return r; }
+    const nomeDoItem = x => {
+      const k = x.chave || x.id || '';
+      if(k.startsWith('p:')) return nomePessoa(k.slice(2));
+      const i = atuacao(k.replace(/^[ra]:/, ''));
+      return i ? nomePessoa(i.pessoaRef) : k;
+    };
+    const lista = rec => rec.map(x=>{ const nm = nomeDoItem(x); return rec.length === 1 && !r.ok ? texto(x.codigo, {...ctx, nome: nm}) : `${nm} (${texto(x.codigo, {...ctx, nome: nm})})`; });
+    if(!r.ok){
+      const rec = r.erro && r.erro.recusados;
+      avisar(rec && rec.length ? (rec.length === 1 ? lista(rec)[0] : `Nada foi alterado: ${lista(rec).join('; ')}`) : texto(r.erro && r.erro.codigo, ctx), 'erro');
+      return r;
+    }
     const v = r.valor || {};
     if(v.recusados && v.recusados.length){
-      const quem = v.recusados.map(x=>{
-        const i = x.id ? atuacao(x.id) : null;
-        const n = i ? nomePessoa(i.pessoaRef) : (x.chave || x.id || '').replace(/^[pra]:/, '');
-        return `${n} (${texto(x.codigo, ctx)})`;
-      });
-      avisar(`${okMsg(v)} Ficaram de fora, sem nenhuma alteração: ${quem.join('; ')}`, 'erro');
+      avisar(`${okMsg(v)} Ficaram de fora, sem nenhuma alteração: ${lista(v.recusados).join('; ')}`, 'erro');
     } else avisar(okMsg(v), 'ok');
     return r;
   }
@@ -3597,10 +3630,11 @@ Regras:
     if(acao === 'adicionar'){
       const chaves = [...P.marcados];
       if(!chaves.length) return;
-      const fn = org === CORP ? () => M.adicionarNaRede(S, chaves, a.id, autor) : () => M.adicionarEmBloco(S, chaves, a.id, autor);
+      const fn = org === CORP ? () => M.adicionarNaRede(S, chaves, a.id, autor, undefined, { funcao: P.funcao })
+        : () => M.adicionarEmBloco(S, chaves, a.id, autor);
       const r = executar(`${plural(chaves.length,'pessoa','pessoas')} na equipe de ${nome}`, fn, {nome},
         v => `${plural(v.aplicados.length,'pessoa entrou','pessoas entraram')} na equipe de ${nome}.`);
-      if(r.ok){ P.marcados.clear(); renderListaPool(); }
+      if(r.ok){ P.marcados.clear(); P.funcao = ''; renderListaPool(); }
       return;
     }
     if(acao === 'remover'){
@@ -3615,13 +3649,27 @@ Regras:
     }
     if(acao === 'lider'){
       const valor = !a.podeLiderar;
+      /* R22: mesmo efeito da Matriz (D17): marca todas as atuações da pessoa na organização, cria ou desativa a conta de
+         Avaliador e grava no banco. Desmarcar quem tem equipe é recusado antes, pela equipe desta atuação. */
+      const pv = window.LGH_LID && (typeof PESSOAS !== 'undefined' ? PESSOAS : []).find(p=>p.id===a.pessoaRef);
+      if(pv){
+        if(!valor && M.equipeDe(S, a.id).length){ avisar(texto('lider_com_equipe', {nome}), 'erro'); return; }
+        const r = window.LGH_LID.definirLider(pv, valor);
+        redesenhar();
+        avisar(r.msg, r.ok ? 'ok' : 'erro');
+        return;
+      }
       executar(`${valor ? 'marcar' : 'desmarcar'} ${nome} como líder`, () => M.marcarLider(S, a.id, valor), {nome},
         () => valor ? `${nome} agora pode ter equipe.` : `${nome} deixou de ter marca de líder.`);
       return;
     }
     if(acao === 'raiz'){
       executar(`${nome} como raiz de ${nomeOrganizacao()}`, () => M.marcarRaiz(S, a.id, autor), {nome, raiz:true},
-        v => `${nome} é a raiz de ${nomeOrganizacao()}.${v.anteriores && v.anteriores.length ? ' A raiz anterior ficou sem líder.' : ''}`);
+        v => {
+          if(!v.anteriores || !v.anteriores.length) return `${nome} é a raiz de ${nomeOrganizacao()}.`;
+          const n = pessoasAbaixo(v.anteriores);
+          return `${nome} é a raiz de ${nomeOrganizacao()}. A raiz anterior e ${plural(n,'pessoa','pessoas')} abaixo dela ficaram fora da árvore até serem religadas.`;
+        });
     }
   }
 
@@ -3646,7 +3694,10 @@ Regras:
     if(t.id === 'ar-pool-cargo'){ P.filtro.cargo = t.value; renderListaPool(); }
     if(t.id === 'ar-pool-setor'){ P.filtro.setor = t.value; renderListaPool(); }
   });
-  painel.addEventListener('input', e=>{ if(e.target.id === 'ar-pool-texto'){ P.filtro.texto = e.target.value; renderListaPool(); } });
+  painel.addEventListener('input', e=>{
+    if(e.target.id === 'ar-pool-texto'){ P.filtro.texto = e.target.value; renderListaPool(); }
+    if(e.target.id === 'ar-funcao'){ P.funcao = e.target.value; const a = selecionada(); if(a) renderBotao(a); }
+  });
   document.addEventListener('lgh-arvore-selecionada', e=>{
     if(e.detail && e.detail.atuacaoId) S.arSelecionada = e.detail.atuacaoId;
     avisar(''); render();

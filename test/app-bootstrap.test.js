@@ -35,6 +35,25 @@ test('atuacoesIniciais: PJ inferido entra com origem e método; sem casamento va
   assert.deepEqual(semOrganizacao.map(p => p.id).sort(), ['CEO-REDE', 'DR', 'PJ-SEM-ORG']);
   assert.deepEqual(semOrganizacao.find(p => p.id === 'PJ-SEM-ORG').vinculosPJ, [{ empresa: 'EMPRESA SEM FILIAL', cargo: 'CONSULTOR EXTERNO' }]);
 });
+test('R23: a raiz e quem ficou com subordinado nascem líderes, com log quando o piloto não marcou', () => {
+  const { atuacoes, log } = iniciais(pilotoMini());
+  const por = id => atuacoes.find(a => a.id === id);
+  assert.equal(por('GOLDEN|GG|1').ehRaiz, true);
+  assert.equal(por('GOLDEN|GG|1').podeLiderar, true, 'raiz lidera');
+  assert.ok(log.some(l => l.codigo === 'lider_inferido_por_raiz' && l.atuacaoId === 'GOLDEN|GG|1'));
+  assert.equal(por('GOLDEN|CAM|1').podeLiderar, false, 'a camareira não tem subordinado e continua sem marca');
+  assert.equal(por('GOLDEN|SUP|1').podeLiderar, true);
+  assert.ok(!log.some(l => /^lider_inferido/.test(l.codigo) && l.atuacaoId === 'GOLDEN|SUP|1'), 'o piloto já marcou a supervisora: sem log');
+  const comSub = new Set(atuacoes.map(a => a.superiorId).filter(Boolean));
+  for (const a of atuacoes) if (a.ehRaiz || comSub.has(a.id)) assert.equal(a.podeLiderar, true, a.id);
+  /* sem piloto ninguém vem marcado: quem tem subordinado só tem pelo piloto, então só a raiz é inferida */
+  const sem = iniciais({});
+  assert.equal(sem.atuacoes.find(a => a.id === 'GOLDEN|GG|1').podeLiderar, true);
+  const p = pilotoMini(); p['SUPERVISOR DE GOVERNANCA TESTE'] = { ...p['SUPERVISOR DE GOVERNANCA TESTE'], lider: false };
+  const r = iniciais(p);
+  assert.equal(r.atuacoes.find(a => a.id === 'GOLDEN|SUP|1').podeLiderar, true, 'tem a camareira abaixo');
+  assert.ok(r.log.some(l => l.codigo === 'lider_inferido_por_subordinados' && l.atuacaoId === 'GOLDEN|SUP|1'));
+});
 test('atuacoesIniciais: pessoa com CLT e PJ na mesma organização tem uma atuação só, a da carga', () => {
   const { atuacoes } = iniciais();
   const d = atuacoes.filter(x => x.pessoaRef === 'DUPLO-VINCULO');
@@ -184,6 +203,9 @@ test('base real: PJ inferidos, pool sem organização, raiz do Golden', { skip: 
   assert.ok(inferidas.length >= 100);
   assert.ok(semOrganizacao.length >= 100 && semOrganizacao.length <= 140);
   assert.equal(raizesGolden.length, 1);
+  assert.equal(raizesGolden[0].podeLiderar, true, 'R23: a raiz do Golden nasce líder');
+  const comSubReal = new Set(atuacoes.map(a => a.superiorId).filter(Boolean));
+  assert.ok(atuacoes.filter(a => comSubReal.has(a.id)).every(a => a.podeLiderar), 'R23: todo superior da carga é líder');
   console.log(`# criadas pelo piloto (só PJ sem organização): ${porCodigo.atuacao_criada_pelo_piloto ?? 0}; realocadas: ${porCodigo.realocado_pelo_piloto ?? 0}; mantidas (múltiplas): ${porCodigo.realocado_pelo_piloto_multiplas ?? 0}`);
   assert.equal(porCodigo.avaliador_fora_da_organizacao ?? 0, 0, 'todo avaliador do piloto tem atuação no Golden');
   assert.ok((porCodigo.realocado_pelo_piloto ?? 0) >= 1);

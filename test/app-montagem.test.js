@@ -71,16 +71,16 @@ test('adicionarEmBloco recusa o lote inteiro quando um id é o próprio superior
 
 test('R20: superior sem marca de líder é recusado no lote e no definirSuperior do adaptador', () => {
   const S = estado();
-  const gg = idDe(S, 'GG');
-  assert.equal(por(S, gg).podeLiderar, false, 'premissa da fixture: o gerente geral não está marcado como líder');
+  const gar = idDe(S, 'GAR1');
+  assert.equal(por(S, gar).podeLiderar, false, 'premissa da fixture: o garçom não está marcado como líder');
   const antes = copia(S);
-  const r = adicionarEmBloco(S, [idDe(S, 'COZ1'), idDe(S, 'GAR1')], gg, 'RH', '2026-11-04');
+  const r = adicionarEmBloco(S, [idDe(S, 'COZ1'), idDe(S, 'ANA')], gar, 'RH', '2026-11-04');
   assert.equal(r.ok, false); assert.equal(r.codigo, 'superior_sem_marca_de_lider');
-  const d = definirSuperior(S, idDe(S, 'COZ1'), gg, 'RH', '2026-11-04');
+  const d = definirSuperior(S, idDe(S, 'COZ1'), gar, 'RH', '2026-11-04');
   assert.equal(d.ok, false); assert.equal(d.codigo, 'superior_sem_marca_de_lider');
   assert.deepEqual(copia(S), antes);
-  assert.equal(marcarLider(S, gg, true).ok, true);
-  assert.equal(adicionarEmBloco(S, [idDe(S, 'COZ1')], gg, 'RH', '2026-11-04').ok, true, 'marcado como líder, passa');
+  assert.equal(marcarLider(S, gar, true).ok, true);
+  assert.equal(adicionarEmBloco(S, [idDe(S, 'COZ1')], gar, 'RH', '2026-11-04').ok, true, 'marcado como líder, passa');
 });
 
 test('lote com uma pessoa recusada (avaliação mútua): ela fica exatamente como estava, as outras entram', () => {
@@ -183,4 +183,20 @@ test('criarAtuacaoNaOrganizacao recusa superior sem marca de líder, a própria 
   assert.equal(criarAtuacaoNaOrganizacao(S, { pessoaId: 'SUP', organizacaoId: 'GOLDEN', superiorAtuacaoId: dr, funcao: 'X', autor: 'RH' }).codigo, 'superior_fora_da_organizacao');
   assert.equal(adicionarNaRede(S, ['p:NINGUEM'], dr, 'RH').recusados[0].codigo, 'fora_do_pool');
   assert.deepEqual(copia(S), antes);
+});
+
+test('adicionarNaRede não inventa função: sem cargo na carga recusa sem_funcao; com a função informada, grava ela', () => {
+  const T = estado(soCEO());
+  const ceo = idDe(T, 'CEO-REDE', CORP);
+  T.semOrganizacao.find(p => p.id === 'DR').vinculosPJ = [{ empresa: 'LAGHETTO ADMINISTRADORA DE HOTEIS', cargo: null }];
+  assert.equal(poolRede(T).find(i => i.chave === 'p:DR').funcao, null, 'premissa: o diretor regional está sem cargo na carga');
+  const antes = copia(T);
+  const r = adicionarNaRede(T, ['p:DR'], ceo, 'RH', '2026-11-04');
+  assert.equal(r.ok, false); assert.equal(r.codigo, 'sem_funcao'); assert.deepEqual(r.recusados, [{ chave: 'p:DR', codigo: 'sem_funcao' }]);
+  assert.deepEqual(copia(T), antes);
+  assert.ok(!T.atuacoes.some(a => a.funcao === 'Sem função'));
+  assert.equal(adicionarNaRede(T, ['p:DR'], ceo, 'RH', '2026-11-04', { funcao: '  ' }).codigo, 'sem_funcao', 'só espaço não conta');
+  const ok = adicionarNaRede(T, ['p:DR'], ceo, 'RH', '2026-11-04', { funcao: 'Diretor regional' });
+  assert.equal(ok.ok, true);
+  assert.equal(T.atuacoes.find(a => a.pessoaRef === 'DR' && a.organizacaoId === CORP).funcao, 'Diretor regional');
 });

@@ -90,8 +90,8 @@ test('tela: "Selecionar todos os filtrados" respeita o filtro de texto; recusa a
   assert.match(document.querySelector('#ar-adicionar').textContent, /Adicionar 1 à/);
   document.querySelector('#ar-adicionar').click();
   assert.equal(por(S, idDe(S, 'COZ1')).superiorId, sup);
-  /* GG não é líder: o painel não oferece adicionar e explica */
-  caixa(document, idDe(S, 'GG')).click();
+  /* o garçom não é líder: o painel não oferece adicionar e explica */
+  caixa(document, idDe(S, 'GAR1')).click();
   assert.match(painel(document).textContent, /não está marcado como líder/);
   assert.equal(document.querySelector('#ar-adicionar').disabled, true);
   /* desmarcar líder com equipe: recusado com mensagem */
@@ -173,4 +173,53 @@ test('tela: na Rede, adicionar do pool cria a atuação corporativa sob o direto
   assert.ok(!S.atuacoes.some(a => a.pessoaRef === 'GG' && a.organizacaoId === CORP));
   assert.ok(checks(document).some(x => x.dataset.pool === `r:${gg}`));
   assert.deepEqual(erros.map(String), []);
+});
+
+test('R22: marcar líder pelo painel cria a conta de Avaliador, como na Matriz; desmarcar tira', async () => {
+  const { window, document, S } = await abrir();
+  const coz = idDe(S, 'COZ1');
+  const conta = () => window.eval("JSON.stringify(USUARIOS.filter(u => u.nome === 'COZINHEIRO UM TESTE'))");
+  assert.deepEqual(JSON.parse(conta()), [], 'premissa: sem conta');
+  caixa(document, coz).click();
+  painel(document).querySelector('[data-acao="lider"]').click();
+  assert.equal(por(S, coz).podeLiderar, true);
+  const c = JSON.parse(conta());
+  assert.equal(c.length, 1); assert.equal(c[0].papel, 'avaliador'); assert.equal(c[0].ativo, true);
+  assert.match(document.querySelector('#ar-painel-msg').textContent, /agora é líder/);
+  assert.match(painel(document).querySelector('[data-acao="lider"]').textContent, /Desmarcar como líder/);
+  painel(document).querySelector('[data-acao="lider"]').click();
+  assert.equal(por(S, coz).podeLiderar, false);
+  assert.deepEqual(JSON.parse(conta()), [], 'a conta criada pela marca some junto');
+});
+
+test('Marcar como raiz: a mensagem diz quantas pessoas ficaram fora da árvore', async () => {
+  const { document, S } = await abrir(null, ADMIN);
+  const gg = idDe(S, 'GG'), sup = idDe(S, 'SUP');
+  /* pessoas abaixo do gerente geral, contadas direto de S.atuacoes */
+  const abaixo = new Set(); const fila = [gg];
+  while (fila.length) { const id = fila.shift(); for (const a of S.atuacoes.filter(x => x.superiorId === id && x.situacao === 'ativa' && x.fim == null)) { abaixo.add(a.pessoaRef); fila.push(a.id); } }
+  assert.ok(abaixo.size > 0);
+  caixa(document, sup).click();
+  painel(document).querySelector('[data-acao="raiz"]').click();
+  assert.equal(por(S, sup).ehRaiz, true);
+  assert.match(document.querySelector('#ar-painel-msg').textContent,
+    new RegExp(`A raiz anterior e ${abaixo.size} pessoas abaixo dela ficaram fora da árvore até serem religadas`));
+});
+
+test('Rede: pessoa sem cargo na carga pede a função antes de adicionar, e a função digitada é a gravada', async () => {
+  const soCEO = corporativo().filter(a => a.pessoaRef === 'CEO-REDE');
+  const { window, document, S } = await abrir(soCEO, ADMIN);
+  S.semOrganizacao.find(p => p.id === 'DR').vinculosPJ = [{ empresa: 'X', cargo: null }];
+  escolher(window, document, '#ar-org', CORP);
+  caixa(document, idDe(S, 'CEO-REDE', CORP)).click();
+  checks(document).find(c => c.dataset.pool === 'p:DR').click();
+  assert.match(painel(document).textContent, /DIRETOR REGIONAL TESTE não tem cargo na carga; informe a função/);
+  const btn = document.querySelector('#ar-adicionar');
+  assert.equal(btn.disabled, true, 'sem a função o botão fica desabilitado');
+  const f = document.querySelector('#ar-funcao'); f.value = 'Diretor regional'; f.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.equal(btn.disabled, false);
+  btn.click();
+  const nova = S.atuacoes.find(a => a.pessoaRef === 'DR' && a.organizacaoId === CORP);
+  assert.ok(nova); assert.equal(nova.funcao, 'Diretor regional');
+  assert.ok(!S.atuacoes.some(a => a.funcao === 'Sem função'));
 });
