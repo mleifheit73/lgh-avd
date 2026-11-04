@@ -281,12 +281,23 @@ td .sub{font-size:.74rem;color:var(--muted);margin-top:2px}
   .nav{top:calc(env(safe-area-inset-top,0px) + 47px)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* seletor de organização (Plano B, D5): entrada pela organização, filtro por empresa contratante */
+.org-sel{display:flex;align-items:center;gap:6px;min-width:0}
+.org-sel[hidden]{display:none}
+.org-sel select{font:inherit;font-size:.8rem;height:28px;padding:0 6px;border:1px solid var(--line);border-radius:7px;
+  background:var(--surface);color:var(--fg);max-width:240px;min-width:0}
+.org-sel #org-empresa{max-width:150px;color:var(--muted)}
+@media (max-width:640px){.org-sel #org-empresa{display:none}.org-sel select{max-width:130px}}
 </style>
 
 <header class="top">
   <div class="brand"><span class="dot">L</span><b>Avaliação de Desempenho</b></div>
   <span class="pill">Protótipo</span>
   <div class="whoami">
+    <div class="org-sel" id="org-sel" hidden>
+      <select id="org-empresa" aria-label="Filtrar organizações pela empresa contratante" title="Filtrar organizações pela empresa contratante"></select>
+      <select id="org-seletor" aria-label="Organização" title="Organização em exibição"></select>
+    </div>
     <button class="tema-btn" id="tema" aria-label="Alternar tema"></button>
     <span id="who">Nenhum perfil selecionado</span>
     <button class="linkish" id="trocar" hidden>Trocar perfil</button></div>
@@ -388,7 +399,7 @@ td .sub{font-size:.74rem;color:var(--muted);margin-top:2px}
     <span id="lote-msg" style="font-size:.82rem;color:var(--muted)"></span>
   </div>
   <div class="scroll"><table id="m-tabela">
-    <thead><tr><th>Colaborador</th><th>Função</th><th>Setor</th><th>Situação</th><th>Avaliadores</th></tr></thead>
+    <thead><tr><th>Colaborador</th><th>Função</th><th>Setor</th><th>Situação</th><th>Avaliadores</th><th>Origem do vínculo</th></tr></thead>
     <tbody></tbody></table></div>
 </section>
 
@@ -405,7 +416,7 @@ td .sub{font-size:.74rem;color:var(--muted);margin-top:2px}
     </div>
     <div class="row" style="margin-top:12px;gap:18px;font-size:.85rem;color:var(--muted)">
       <span>Avaliador: <b id="fm-aval" style="color:var(--fg)"></b></span>
-      <span>Unidade: <b style="color:var(--fg)">Hotel Laghetto Golden, Gramado</b></span>
+      <span>Unidade: <b style="color:var(--fg)" id="fm-unidade"></b></span>
       <span>Data: <b style="color:var(--fg)">22/10/2026</b></span>
     </div>
   </div>
@@ -559,8 +570,12 @@ td .sub{font-size:.74rem;color:var(--muted);margin-top:2px}
 
 </main>
 
+<script src="js/lgh.bundle.js"></script>
 <script>
-let PESSOAS = []; /* preenchido em boot() a partir de data/base.json (visão de compatibilidade até o adaptador da Tarefa 3) */
+/* Plano B, Tarefa 3: a fonte única é S.atuacoes (com S.organizacoes, S.pessoas, S.pessoasPorId). PESSOAS e AVALIAVEIS são
+   VISÕES de compatibilidade da organização selecionada, reconstruídas por reconstruirViews() depois de toda escrita.
+   Nada escreve em PESSOAS: escrita vai para S.atuacoes pelas funções do adaptador (LGH, app/js/adaptador.js). */
+let PESSOAS = [];
 
 const FORMS = {
  colab:{nome:'Avaliação de desempenho Anual - Colaboradores Hotéis', obsObrig:false, pilares:[
@@ -659,8 +674,11 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 const num = n => n.toFixed(2).replace('.', ',');
 function hash(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h}
 function concluida(p){
-  /* v27, 03/11: so avaliacao enviada de verdade conta como concluida (opcao A do Marcelo). O sorteio de 55% da demonstracao foi removido. */
-  return typeof ENVIADAS !== 'undefined' && !!(ENVIADAS[p.id+'|colab'] || ENVIADAS[p.id+'|lider']);
+  /* v27, 03/11: so avaliacao enviada de verdade conta como concluida (opcao A do Marcelo). O sorteio de 55% da demonstracao foi removido.
+     Plano B: a chave e a atuacao (spec 3.7). Registro com atuacaoId olha so aquela atuacao; registro de pessoa, qualquer uma das dela. */
+  if(typeof ENVIADAS === 'undefined' || !p) return false;
+  const ids = p.atuacaoId ? [p.atuacaoId] : (p.atuacoes || []);
+  return ids.some(id => !!(ENVIADAS[id+'|colab'] || ENVIADAS[id+'|lider']));
 }
 function fmtNota(v){ return (Math.round(v*10)/10).toFixed(1).replace('.', ','); }
 function sanitizarNota(txt){
@@ -671,16 +689,23 @@ function sanitizarNota(txt){
   if (!isNaN(v) && v > 5) t = '5,0';
   return t;
 }
-function fichaAvaliador(nome){
-  const p = PESSOAS.find(x=>x.nome===nome);
-  if(!p) return {nome, cargo:'', setor:'', externo:false};
-  return {nome, cargo:p.cargo, setor:p.setor, externo:!!p.externo};
+/* Aceita o id de uma atuação (lista de líderes da Matriz) ou um nome (avaliadores da visão). */
+function fichaAvaliador(chave){
+  const a = S.views && S.views.atuacoesPorId && S.views.atuacoesPorId.get(chave);
+  if(a){
+    const c = LGH.colabDe(S, a);
+    if(c) return {nome:c.nome, cargo:c.funcao||c.cargo, setor:c.setor, externo:!!c.externo, ordem:c.ordem, total:c.totalAtuacoes};
+  }
+  const p = PESSOAS.find(x=>x.nome===chave);
+  if(!p) return {nome:chave, cargo:'', setor:'', externo:false};
+  return {nome:chave, cargo:p.cargo, setor:p.setor, externo:!!p.externo};
 }
-function rotuloAvaliador(nome){
-  const f = fichaAvaliador(nome);
+function rotuloAvaliador(chave){
+  const f = fichaAvaliador(chave);
   let t = f.nome;
-  if(f.cargo) t += ' — ' + f.cargo;
+  if(f.cargo) t += ', ' + f.cargo;
   if(f.setor) t += ' · ' + f.setor;
+  if(f.total > 1) t += ` · ${f.ordem}ª atuação`;
   if(f.externo) t += ' · outro CNPJ';
   return t;
 }
@@ -696,18 +721,36 @@ let CARGOS = [];
 let FUNCOES = [];
 let SETORES = [];
 let ORIGINAL = [];
-/* Boot (Plano B, Tarefa 1): os derivados de PESSOAS deixam de ser calculados na carga do script e passam a ser recalculados
-   aqui, depois que boot() preenche PESSOAS. Mesmos nomes de antes. */
+/* Derivados das visões. Recalculados por reconstruirViews(), sempre da organização selecionada. Mesmos nomes de antes.
+   AVALIAVEIS = PESSOAS: toda pessoa da visão tem atuação corrente na organização (quem é pago por outro CNPJ e atua aqui
+   é avaliado aqui; "externo" só rotula o CNPJ). */
 function recalcularDerivados(){
-  PESSOAS.forEach(p=>{ if(!p.situacao) p.situacao='Ativo'; if(!p.funcao) p.funcao=p.cargo; });
-  AVALIAVEIS = PESSOAS.filter(p => !p.externo);
+  AVALIAVEIS = PESSOAS;
   EQUIPES = [...new Set(PESSOAS.map(p=>p.equipe))].sort();
   EMPRESAS = [...new Map(PESSOAS.map(p=>[p.cnpj,{cnpj:p.cnpj,nome:p.filial}])).values()];
   CARGOS = [...new Set(PESSOAS.map(p=>p.cargo))].sort();
-  FUNCOES = CARGOS;
-  SETORES = [...new Set(PESSOAS.map(p=>p.setor))].sort();
-  ORIGINAL = instantanea();
+  FUNCOES = [...new Set([...CARGOS, ...PESSOAS.map(p=>p.funcao).filter(Boolean)])].sort();
+  SETORES = [...new Set([...PESSOAS.map(p=>p.setor), LGH.SEM_SETOR])].sort();
 }
+/* Visões de compatibilidade a partir de S.atuacoes (adaptador). Chamada depois de toda escrita e na troca de organização. */
+function reconstruirViews(estado){
+  const v = LGH.reconstruirViews(estado || S);
+  PESSOAS = v.pessoas;
+  recalcularDerivados();
+  return v;
+}
+function colabPorAtuacao(id){ return LGH.colabDe(S, id); }
+/* Itens de avaliação (uma linha por atuação) que o perfil alcança na organização selecionada. */
+function itensVisiveis(){ return LGH.atuacoesVisiveis(S).map(a=>LGH.colabDe(S, a)).filter(Boolean); }
+/* Atuações que o perfil logado supervisiona na organização selecionada, qualquer que seja o papel (Painel do avaliador). */
+function itensDoAvaliador(){
+  const pid = LGH.pessoaDoPerfil(S);
+  if(!pid || !S.organizacaoSelecionada) return [];
+  return LGH.avaliadosDe(S, pid, S.organizacaoSelecionada).map(a=>LGH.colabDe(S, a)).filter(Boolean);
+}
+function nomeOrganizacao(){ const o = S.views && S.views.organizacao; return o ? o.nome : 'Nenhuma organização'; }
+function autorAtual(){ return S.perfil ? S.perfil.nome : 'RH'; }
+function avisoErro(e){ return (e && e.message) || String(e); }
 function noCiclo(p){ return p.situacao==='Ativo' || p.situacao==='Férias'; }
 function tagSit(s){
   const c = s==='Ativo'?'t-ok' : s==='Desligado'?'t-crit' : 't-warn';
@@ -715,21 +758,18 @@ function tagSit(s){
 }
 /* v29, 03/11: turno retirado do modelo a pedido do RH (decisao relatada por Marcelo). Equipe passa a ser o setor. */
 function recalcEquipes(){EQUIPES=[...new Set(AVALIAVEIS.map(p=>p.equipe))].sort()}
-const CAMPOS_MUT = ['funcao','setor','equipe','situacao','lider']; /* 'lider' entrou na v30 para o Desfazer cobrir a marca de líder */
-function instantanea(){
-  return PESSOAS.map(p=>{const o={id:p.id, avaliadores:[...p.avaliadores]}; CAMPOS_MUT.forEach(c=>o[c]=p[c]); return o;});
-}
+/* Desfazer (30 passos): a instantânea é cópia profunda de S.atuacoes, a fonte única. Função, setor, situação, superior e
+   marca de líder vivem na atuação, então todos ficam cobertos. Restaurar reconstrói as visões. */
+function instantanea(){ return JSON.parse(JSON.stringify(S.atuacoes || [])); }
 const HIST = [];
 function aplicarInstantanea(snap){
-  const m = new Map(snap.map(s=>[s.id,s]));
-  PESSOAS.forEach(p=>{ const s=m.get(p.id); if(!s) return;
-    CAMPOS_MUT.forEach(c=>p[c]=s[c]); p.avaliadores=[...s.avaliadores]; });
-  recalcEquipes();
+  S.atuacoes = JSON.parse(JSON.stringify(snap));
+  reconstruirViews();
 }
 function mudar(desc, fn){
   HIST.push({desc, snap: instantanea()});
   if(HIST.length > 30) HIST.shift();
-  fn();
+  try{ fn(); } finally { reconstruirViews(); }
 }
 function desfazer(){
   const h = HIST.pop();
@@ -737,11 +777,7 @@ function desfazer(){
   aplicarInstantanea(h.snap);
   return h.desc;
 }
-function herdarAvaliadores(p){
-  p.equipe = p.setor;
-  p.avaliadores = [...new Set(daEquipe(p.equipe).filter(x=>x.id!==p.id).flatMap(x=>x.avaliadores))].filter(a=>a!==p.nome);
-  recalcEquipes();
-}
+/* herdarAvaliadores foi retirada no Plano B: setor não implica avaliador. O superior é definido na atuação. */
 function daEquipe(eq){return AVALIAVEIS.filter(p=>p.equipe===eq)}
 function semAcento(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
 function casaBusca(p, termo){
@@ -749,21 +785,38 @@ function casaBusca(p, termo){
   return semAcento(p.nome).includes(t) || semAcento(p.id).includes(t) ||
          semAcento(p.cargo).includes(t) || semAcento(p.funcao).includes(t);
 }
-function visiveis(){
-  if(!S.perfil) return [];
-  if(S.perfil.papel === 'avaliador') return avaliadosDe(S.perfil.nome);
-  return AVALIAVEIS;
-}
+/* Escopo por atuação (spec 6), sempre dentro da organização selecionada. Os nomes antigos continuam chamáveis pelos blocos:
+   visiveis() e avaliadosDe(nome) resolvem para o adaptador; visiveis(S) e avaliadosDe(S, pessoaId, organizacaoId) são o adaptador. */
+function visiveis(estado){ return LGH.visiveis(estado || S); }
 function descricaoEscopo(){
   if(!S.perfil) return '';
   if(S.perfil.papel === 'avaliador')
-    return `Você enxerga apenas as pessoas que avalia. Outras equipes do hotel não aparecem aqui.`;
+    return `Você enxerga apenas as pessoas que avalia em ${nomeOrganizacao()}. Outras equipes não aparecem aqui.`;
   if(S.perfil.papel === 'admin')
-    return `Visão da holding. No piloto a base tem só o Hotel Golden; com a rede carregada seriam as 37 filiais.`;
-  return `Visão do Hotel Laghetto Golden, os dois CNPJs da unidade.`;
+    return `Visão da holding sobre ${nomeOrganizacao()}. Troque a organização no topo para ver outra: a rede inteira nunca aparece numa lista só.`;
+  return `Visão de ${nomeOrganizacao()}.`;
 }
-function equipesDe(nome){return EQUIPES.filter(eq=>daEquipe(eq).some(p=>p.avaliadores.includes(nome)))}
-function avaliadosDe(nome){return AVALIAVEIS.filter(p=>p.avaliadores.includes(nome))}
+function equipesDe(nome){
+  const pid = LGH.pessoaIdPorNome(S, nome);
+  if(!pid) return [];
+  return [...new Set(LGH.avaliadosDe(S, pid, S.organizacaoSelecionada).map(a=>a.setor||LGH.SEM_SETOR))].sort();
+}
+/* avaliadosDe(nome): itens de avaliação (um por atuação) supervisionados pela pessoa desse nome na organização selecionada. */
+function avaliadosDe(a, b, c){
+  if(a && typeof a === 'object') return LGH.avaliadosDe(a, b, c);
+  const pid = LGH.pessoaIdPorNome(S, a);
+  if(!pid || !S.organizacaoSelecionada) return [];
+  return LGH.avaliadosDe(S, pid, S.organizacaoSelecionada).map(x=>LGH.colabDe(S, x)).filter(Boolean);
+}
+/* Interfaces do adaptador como globais (consumidas pelas próximas tarefas). */
+function pessoasDa(estado, organizacaoId){ return LGH.pessoasDa(estado, organizacaoId); }
+function rotuloOrigem(a){ return LGH.rotuloOrigem(a); }
+function nivelDe(estado, pessoaId, papel){ return LGH.nivelDe(estado, pessoaId, papel); }
+function definirSuperior(estado, atuacaoId, superiorAtuacaoId, autor, quando){ return LGH.definirSuperior(estado, atuacaoId, superiorAtuacaoId, autor, quando); }
+function removerSuperior(estado, atuacaoId, autor, quando){ return LGH.removerSuperior(estado, atuacaoId, autor, quando); }
+function marcarLider(estado, atuacaoId, valor){ return LGH.marcarLider(estado, atuacaoId, valor); }
+function selecionarOrganizacao(estado, organizacaoId){ const v = LGH.selecionarOrganizacao(estado, organizacaoId); if(estado === S) reconstruirViews(); return v; }
+function organizacoesVisiveis(estado){ return LGH.organizacoesVisiveis(estado || S); }
 
 /* navegação */
 function irPara(id){
@@ -790,8 +843,60 @@ async function hashCpf(d){
   const dig = await crypto.subtle.digest('SHA-256', b);
   return [...new Uint8Array(dig)].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
+/* ---- seletor de organização no topo (D5): entrada pela organização, filtro pela empresa contratante ---- */
+S.orgEmpresa = '';
+function mapasDoSeletor(){
+  const pessoasPorOrg = new Map(), orgsPorEmpresa = new Map();
+  for(const a of S.atuacoes || []){
+    if(a.situacao !== 'ativa' || a.fim != null) continue;
+    (pessoasPorOrg.get(a.organizacaoId) || pessoasPorOrg.set(a.organizacaoId, new Set()).get(a.organizacaoId)).add(a.pessoaRef);
+    const v = LGH.vinculoDaAtuacao(S, a), e = v && v.empresa;
+    if(e) (orgsPorEmpresa.get(e) || orgsPorEmpresa.set(e, new Set()).get(e)).add(a.organizacaoId);
+  }
+  return {pessoasPorOrg, orgsPorEmpresa};
+}
+function pintarSeletorOrg(){
+  const caixa = $('#org-sel');
+  caixa.hidden = !S.perfil;
+  if(!S.perfil) return;
+  const orgs = organizacoesVisiveis();
+  const {pessoasPorOrg, orgsPorEmpresa} = mapasDoSeletor();
+  const visiveisIds = new Set(orgs.map(o=>o.id));
+  const empresas = [...orgsPorEmpresa.entries()].filter(([,os])=>[...os].some(id=>visiveisIds.has(id))).map(([e])=>e).sort();
+  if(S.orgEmpresa && !empresas.includes(S.orgEmpresa)) S.orgEmpresa = '';
+  $('#org-empresa').innerHTML = `<option value="">Todas as empresas</option>` +
+    empresas.map(e=>`<option value="${esc(e)}" ${e===S.orgEmpresa?'selected':''}>${esc(e)}</option>`).join('');
+  const daEmpresa = S.orgEmpresa ? (orgsPorEmpresa.get(S.orgEmpresa) || new Set()) : null;
+  const lista = orgs.filter(o=>!daEmpresa || daEmpresa.has(o.id) || o.id===S.organizacaoSelecionada);
+  $('#org-seletor').innerHTML = lista.map(o=>{
+    const n = (pessoasPorOrg.get(o.id) || new Set()).size;
+    return `<option value="${esc(o.id)}" ${o.id===S.organizacaoSelecionada?'selected':''}>${esc(o.nome)} (${n} ${n===1?'pessoa':'pessoas'})${o.origem==='sugerida_pela_carga'?' · sugerida pela carga':''}</option>`;
+  }).join('') || '<option value="">Nenhuma organização no seu escopo</option>';
+  $('#org-seletor').onchange = ()=>{ if($('#org-seletor').value) trocarOrganizacao($('#org-seletor').value); };
+  $('#org-empresa').onchange = ()=>{
+    S.orgEmpresa = $('#org-empresa').value;
+    const alvo = S.orgEmpresa ? orgs.find(o=>(orgsPorEmpresa.get(S.orgEmpresa)||new Set()).has(o.id)) : null;
+    if(alvo && !(orgsPorEmpresa.get(S.orgEmpresa)||new Set()).has(S.organizacaoSelecionada)) trocarOrganizacao(alvo.id);
+    else pintarSeletorOrg();
+  };
+}
+function trocarOrganizacao(id){
+  selecionarOrganizacao(S, id);
+  S.fixado = null; S.busca = ''; S.fCargo = '';
+  S.lidUnidade = nomeOrganizacao();
+  pintarSeletorOrg();
+  if(S.perfil && S.tela && S.tela !== 'login') irPara(S.tela);
+}
 function entrar(u){
-  S.perfil = u;
+  const pid = u.pessoaId || LGH.pessoaIdPorNome(S, u.nome);
+  S.perfil = pid ? {...u, pessoaId: pid} : u;
+  const orgs = organizacoesVisiveis();
+  if(orgs.length && !orgs.some(o=>o.id===S.organizacaoSelecionada)){
+    const supervisiona = pid ? orgs.find(o=>LGH.avaliadosDe(S, pid, o.id).length) : null;
+    selecionarOrganizacao(S, (supervisiona || orgs[0]).id);
+  }
+  S.lidUnidade = nomeOrganizacao();
+  pintarSeletorOrg();
   $('#who').textContent = u.nome + ' · ' + PAPEIS[u.papel].nome;
   $('#trocar').hidden = false;
   montarNav();
@@ -926,6 +1031,12 @@ function renderCiclos(){
 }
 
 /* 9 usuários da plataforma */
+/* Nível derivado (spec 6, D20): calculado pela posição da pessoa nas atuações; o campo gravado só serve ao login de demonstração. */
+function nivelDoUsuario(u){
+  const pid = u.pessoaId || LGH.pessoaIdPorNome(S, u.nome);
+  const n = pid ? LGH.nivelDe(S, pid, u.papel) : (u.papel === 'admin' ? 'N6' : null);
+  return n || 'n/d';
+}
 function renderUsuarios(){
   const admin = pode('gerirUsuarios');
   $('#us-aviso').innerHTML = admin
@@ -948,7 +1059,7 @@ function renderUsuarios(){
       <td><b>${esc(u.nome)}</b>${eu?' <span class="tag t-ok">você</span>':''}</td>
       <td>${esc(u.cargo)}</td>
       <td class="mono" style="font-size:.78rem;color:var(--muted)">${u.cpfHash?'CPF':esc(u.email)}</td>
-      <td class="mono">${esc(u.nivel)}</td>
+      <td class="mono" title="Nível calculado pela posição na estrutura, não digitado">${esc(nivelDoUsuario(u))}</td>
       <td>${admin
         ? `<select class="sel-setor" data-up="${idx}">${chaves.map(k=>`<option value="${k}" ${k===u.papel?'selected':''}>${esc(PAPEIS[k].nome)}</option>`).join('')}</select>`
         : esc(PAPEIS[u.papel].nome)}</td>
@@ -966,51 +1077,56 @@ function renderUsuarios(){
     });
   }
 }
-$('#trocar').onclick = ()=>{S.perfil=null;$('#who').textContent='Nenhum perfil selecionado';$('#trocar').hidden=true;
+$('#trocar').onclick = ()=>{S.perfil=null;$('#who').textContent='Nenhum perfil selecionado';$('#trocar').hidden=true;$('#org-sel').hidden=true;
   $('#in-user').value='';$('#in-senha').value='';erroLogin('');
   S.notas={};S.obs={};S.salvo=false;S.relatorio='';S.colab=null;
   montarNav();irPara('login')};
 
-/* 2 painel do avaliador */
+/* 2 painel do avaliador: uma linha por atuação supervisionada (spec 3.7). A mesma pessoa duas vezes leva o rótulo "2ª atuação". */
 function renderAvaliador(){
   if(!S.perfil){irPara('login');return}
-  const eqs = equipesDe(S.perfil.nome), meus = avaliadosDe(S.perfil.nome);
+  const meus = itensDoAvaliador();
+  const eqs = [...new Set(meus.map(p=>p.equipe))].sort();
+  const vezes = {}; meus.forEach(p=>{ vezes[p.id] = (vezes[p.id]||0) + 1; });
+  const vista = {};
+  meus.forEach(p=>{ vista[p.id] = (vista[p.id]||0) + 1; p.ordemNoPainel = vista[p.id]; });
   const feitas = meus.filter(concluida).length;
   $('#av-titulo').textContent = eqs.length ? 'Minhas avaliações' : 'Você não tem equipes atribuídas';
   $('#av-sub').textContent = eqs.length
-    ? `${S.perfil.cargo}. Ciclo de outubro de 2026, prazo até 30 de novembro.`
-    : 'Este perfil enxerga a unidade mas não é avaliador de nenhuma equipe. Use o painel do RH.';
+    ? `${S.perfil.cargo}. ${nomeOrganizacao()}. Ciclo de outubro de 2026, prazo até 30 de novembro.`
+    : `Este perfil não é avaliador de ninguém em ${nomeOrganizacao()}. Use o painel do RH ou troque a organização no topo.`;
   $('#av-prazo').innerHTML = bannerPrazo(meus.length - feitas);
   $('#av-kpis').innerHTML = [
     ['Equipes', eqs.length, ''], ['Avaliados', meus.length, ''],
     ['Concluídas', feitas, ''], ['Pendentes', meus.length-feitas, meus.length-feitas?'alerta':'']
   ].map(([l,v,c])=>`<div class="kpi ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   $('#av-equipes').innerHTML = eqs.map(eq=>{
-    const m = daEquipe(eq).filter(p=>p.avaliadores.includes(S.perfil.nome));
+    const m = meus.filter(p=>p.equipe===eq);
     const ok = m.filter(concluida).length, pc = m.length? Math.round(ok/m.length*100):0;
-    const outros = [...new Set(m.flatMap(p=>p.avaliadores))].filter(a=>a!==S.perfil.nome);
+    const eu = LGH.normalizarNome(S.perfil.nome);
+    const outros = [...new Set(m.flatMap(p=>p.avaliadoresDaPessoa||[]))].filter(a=>LGH.normalizarNome(a)!==eu);
     return `<div class="card">
       <div class="row" style="justify-content:space-between;align-items:baseline">
         <h3>${esc(eq)}</h3>
         <span style="font-size:.82rem;color:var(--muted)" class="num">${ok} de ${m.length} concluídas</span></div>
       <div class="bar" style="margin:10px 0"><i style="width:${pc}%"></i></div>
-      ${outros.length?`<p style="font-size:.8rem;color:var(--muted);margin:0 0 10px">Avaliação dividida com ${esc(outros.join(', '))}.</p>`:''}
+      ${outros.length?`<p style="font-size:.8rem;color:var(--muted);margin:0 0 10px">Avaliação dividida com ${esc(outros.join(', '))}. Cada um avalia a sua atuação.</p>`:''}
       <div class="scroll" style="border:0"><table><tbody>${m.map(p=>`<tr>
-        <td style="width:40%"><b>${esc(p.nome)}</b><br><span style="color:var(--muted);font-size:.8rem">${esc(p.cargo)}</span></td>
+        <td style="width:40%"><b>${esc(p.nome)}</b>${vezes[p.id]>1?` <span class="tag t-pend">${p.ordemNoPainel}ª atuação</span>`:''}<br><span style="color:var(--muted);font-size:.8rem">${esc(p.funcao||p.cargo)}</span></td>
         <td class="mono" style="color:var(--muted)">${esc(p.id)}</td>
         <td>${concluida(p)?'<span class="tag t-ok">Concluída</span>':'<span class="tag t-pend">Pendente</span>'}</td>
-        <td style="text-align:right"><button class="linkish" data-abrir="${p.id}">Avaliar</button></td></tr>`).join('')}
+        <td style="text-align:right"><button class="linkish" data-abrir="${esc(p.atuacaoId)}">Avaliar</button></td></tr>`).join('')}
       </tbody></table></div></div>`;
   }).join('') || '';
-  document.querySelectorAll('[data-abrir]').forEach(b=>b.onclick=()=>{
-    S.colab = PESSOAS.find(p=>p.id===b.dataset.abrir); S.notas={}; S.obs={}; irPara('form');
+  document.querySelectorAll('#av-equipes [data-abrir]').forEach(b=>b.onclick=()=>{
+    S.colab = colabPorAtuacao(b.dataset.abrir); S.notas={}; S.obs={}; irPara('form');
   });
 }
 
 /* 3 matriz */
 function renderMatriz(){
   const meuEscopo = visiveis();
-  const semAval = meuEscopo.filter(p=>!p.avaliadores.length && noCiclo(p));
+  const semAval = meuEscopo.filter(p=>semAvaliador(p) && noCiclo(p));
   const chip = $('#m-pendentes');
   chip.hidden = !semAval.length;
   if(semAval.length) chip.textContent = `${semAval.length} sem avaliador`;
@@ -1024,8 +1140,9 @@ function renderMatriz(){
   if(semAval.length)
     partes.push(`<p><b>${semAval.length} ${semAval.length===1?'pessoa ainda não tem':'pessoas ainda não têm'} avaliador definido</b>, em ` +
       `${esc([...new Set(semAval.map(p=>p.setor))].join(', '))}. O ciclo não deve ser aberto antes de resolver isso.</p>`);
-  partes.push(`<p><b>Atenção:</b> a atribuição de avaliadores é uma <b>sugestão derivada do cargo</b>, não veio do RH. ` +
-    `Nenhum dos arquivos do Domínio traz o gestor direto, então cada equipe precisa ser confirmada aqui.</p>`);
+  partes.push(`<p><b>Atenção:</b> nenhum dos arquivos do Domínio traz o gestor direto. A coluna <b>Origem do vínculo</b> diz de onde ` +
+    `veio cada superior: <b>Inferido pelo cargo</b> (piloto de outubro) e <b>Inferido pela empresa</b> ainda não foram confirmados ` +
+    `pelo RH; <b>Definido pelo RH</b> foi. Cada equipe precisa ser confirmada aqui.</p>`);
   partes.push(`<p><b>Cargo</b> e <b>empresa</b> vêm da carga mensal do Domínio e não se alteram aqui. A <b>função</b> ` +
     `nasce igual ao cargo e é ajustável quando o cargo não descreve o que a pessoa faz. A <b>equipe</b> é o setor: ` +
     `o RH decidiu que turno não entra na avaliação.</p>`);
@@ -1037,10 +1154,12 @@ function renderMatriz(){
     $('#m-info').hidden = !S.infoAberta;
     $('#m-info-btn').setAttribute('aria-expanded', String(S.infoAberta));
   };
-  if(!$('#f-setor').options.length){
-    $('#f-setor').innerHTML = '<option value="">Todos</option>'+SETORES.map(s=>`<option>${esc(s)}</option>`).join('');
-    $('#f-empresa').innerHTML = '<option value="">Todas</option>' +
-      EMPRESAS.map(e=>`<option value="${esc(e.cnpj)}">${esc(e.nome)}</option>`).join('');
+  /* opções dos filtros seguem a organização selecionada: repintadas a cada render, mantendo o valor quando ainda existe */
+  const manter = (sel, html) => { const v = $(sel).value; $(sel).innerHTML = html; if([...$(sel).options].some(o=>o.value===v)) $(sel).value = v; };
+  manter('#f-setor', '<option value="">Todos</option>'+SETORES.map(s=>`<option>${esc(s)}</option>`).join(''));
+  manter('#f-empresa', '<option value="">Todas</option>' + EMPRESAS.map(e=>`<option value="${esc(e.cnpj)}">${esc(e.nome)}</option>`).join(''));
+  if(!S.matrizLigada){
+    S.matrizLigada = true;
     ['#f-setor','#f-sit','#f-situacao','#f-empresa'].forEach(s=>$(s).onchange=()=>{desarmarLote(); pintarMatriz();});
     $('#f-cargo').onchange = ()=>{S.fCargo=$('#f-cargo').value; desarmarLote(); pintarMatriz()};
     const campo = $('#f-busca'), caixa = $('#f-sugestoes');
@@ -1131,7 +1250,7 @@ function pintarMatriz(){
     (!S.busca || S.fixado || casaBusca(p, S.busca)) &&
     (!fs||p.setor===fs)&&(!fsitu||p.situacao===fsitu)&&
     (!femp||p.cnpj===femp)&&
-    (!fsit|| (fsit==='sem'? !p.avaliadores.length : p.avaliadores.length>0)));
+    (!fsit|| (fsit==='sem'? semAvaliador(p) : p.avaliadores.length>0)));
   const cargos = [...new Set(base.map(p=>p.cargo))].sort();
   if(!cargos.includes(S.fCargo)) S.fCargo='';
   $('#f-cargo').innerHTML = `<option value="">Todos (${cargos.length})</option>` +
@@ -1151,59 +1270,95 @@ function pintarMatriz(){
   $('#m-acoes').hidden = !pode('definirAvaliador');
   const editaAv = pode('definirAvaliador'), editaSt = pode('editarSetor');
   const editaFn = pode('editarFuncao'), editaSi = pode('editarSituacao');
-  const LIDERES = PESSOAS.filter(x=>x.lider).map(x=>x.nome).sort();
+  const org = S.organizacaoSelecionada, porId = S.views.atuacoesPorId;
+  const LIDERES = lideresDaOrganizacao();
+  const rotulos = new Map(LIDERES.map(a=>[a.id, rotuloAvaliador(a.id)]));
   const celulaAv = p => {
-    const livres = LIDERES.filter(n=>n!==p.nome && !p.avaliadores.includes(n));
-    const chips = p.avaliadores.map(n=>
-      `<span class="chip" title="${esc(n)}"><b>${esc(nomeCurto(n))}</b>`+
-      (editaAv?`<button data-rm="${p.id}" data-nome="${esc(n)}" aria-label="Remover ${esc(n)}">&times;</button>`:'')+
-      `</span>`).join('');
+    const minhas = p.atuacoes.map(id=>porId.get(id)).filter(Boolean);
+    const supIds = minhas.map(a=>a.superiorId).filter(Boolean);
+    const livres = LIDERES.filter(a=>a.pessoaRef!==p.id && !supIds.includes(a.id));
+    const chips = minhas.filter(a=>a.superiorId).map(a=>{
+      const n = fichaAvaliador(a.superiorId).nome;
+      return `<span class="chip" title="${esc(rotuloAvaliador(a.superiorId))}"><b>${esc(nomeCurto(n))}</b>`+
+        (editaAv?`<button data-rm="${esc(a.id)}" data-nome="${esc(n)}" aria-label="Remover ${esc(n)}">&times;</button>`:'')+
+        `</span>`;
+    }).join('');
+    if(p.raiz) return `<div class="avs">${chips}<span class="tag t-ok" title="Topo da organização: avaliado pela estrutura corporativa">Raiz da unidade</span></div>`;
     if(!editaAv) return `<div class="avs">${chips || '<span class="tag t-crit">Sem avaliador</span>'}</div>`;
     const sel = livres.length
-      ? `<select class="add-av ${p.avaliadores.length?'':'vazio'}" data-add="${p.id}" aria-label="Adicionar avaliador">`+
+      ? `<select class="add-av ${p.avaliadores.length?'':'vazio'}" data-add="${esc(p.id)}" aria-label="Adicionar avaliador">`+
         `<option value="">${p.avaliadores.length?'+ avaliador':'Definir avaliador'}</option>`+
-        livres.map(n=>`<option value="${esc(n)}">${esc(rotuloAvaliador(n))}</option>`).join('')+`</select>`
+        livres.map(a=>`<option value="${esc(a.id)}">${esc(rotulos.get(a.id))}</option>`).join('')+`</select>`
       : '';
     return `<div class="avs">${chips}${sel}</div>`;
   };
+  const celulaOrigem = p => {
+    const minhas = p.atuacoes.map(id=>porId.get(id)).filter(Boolean);
+    return [...new Set(minhas.map(a=>a.origem))].map(o=>{
+      const a = minhas.find(x=>x.origem===o), cls = o==='definido'?'t-ok':o==='carga'?'t-pend':'t-warn';
+      const quem = o==='definido' && a.confirmadaPor ? `Por ${a.confirmadaPor}${a.definidaEm?' em '+brData(a.definidaEm):''}` : (a.metodoInferencia ? 'Método: '+a.metodoInferencia : '');
+      return `<span class="tag ${cls}" title="${esc(quem)}">${esc(LGH.rotuloOrigem(a))}</span>`;
+    }).join(' ');
+  };
   $('#m-tabela').querySelector('tbody').innerHTML = lista.map(p=>`<tr>
     <td class="col-pessoa"><b>${esc(p.nome)}</b>
-      <div class="sub"><span class="mono">${esc(p.id)}</span> · ${esc(p.cargo)}</div></td>
+      <div class="sub"><span class="mono">${esc(p.id)}</span> · ${esc(p.cargo)}${p.atuacoes.length>1?` · ${p.atuacoes.length} atuações`:''}</div></td>
     <td>${editaFn
-      ? `<select class="sel-fn" data-fn="${p.id}" title="${esc(p.funcao)}">${FUNCOES.map(c=>`<option ${c===p.funcao?'selected':''}>${esc(c)}</option>`).join('')}</select>`
+      ? `<select class="sel-fn" data-fn="${esc(p.id)}" title="${esc(p.funcao)}">${FUNCOES.map(c=>`<option ${c===p.funcao?'selected':''}>${esc(c)}</option>`).join('')}</select>`
       : `<span title="${esc(p.funcao)}">${esc(p.funcao)}</span>`}${p.funcao!==p.cargo?'<div class="sub">ajustada</div>':''}</td>
     <td><div class="st-tn">
-      ${editaSt?`<select class="sel-st" data-st="${p.id}">${SETORES.map(s=>`<option ${s===p.setor?'selected':''}>${esc(s)}</option>`).join('')}</select>`:esc(p.setor)}
+      ${editaSt?`<select class="sel-st" data-st="${esc(p.id)}">${SETORES.map(s=>`<option ${s===p.setor?'selected':''}>${esc(s)}</option>`).join('')}</select>`:esc(p.setor)}
     </div></td>
     <td>${editaSi
-      ? `<select class="sel-min2" data-si="${p.id}">${SITUACOES.map(s=>`<option ${s===p.situacao?'selected':''}>${esc(s)}</option>`).join('')}</select>`
+      ? `<select class="sel-min2" data-si="${esc(p.id)}">${SITUACOES.map(s=>`<option ${s===p.situacao?'selected':''}>${esc(s)}</option>`).join('')}</select>`
       : tagSit(p.situacao)}</td>
-    <td>${celulaAv(p)}</td></tr>`).join('');
+    <td>${celulaAv(p)}</td>
+    <td>${celulaOrigem(p)}</td></tr>`).join('');
+  const pessoaDe = id => PESSOAS.find(x=>x.id===id);
   document.querySelectorAll('[data-fn]').forEach(s=>s.onchange=()=>{
-    const p=PESSOAS.find(x=>x.id===s.dataset.fn);
-    mudar(`função de ${p.nome}`, ()=>{ p.funcao = s.value; }); pintarMatriz();
+    const p=pessoaDe(s.dataset.fn);
+    mudar(`função de ${p.nome}`, ()=>{ LGH.definirCampoPessoa(S, p.id, org, 'funcao', s.value); }); pintarMatriz();
   });
   document.querySelectorAll('[data-si]').forEach(s=>s.onchange=()=>{
-    const p=PESSOAS.find(x=>x.id===s.dataset.si);
-    mudar(`situação de ${p.nome}`, ()=>{ p.situacao=s.value;
-      if(p.situacao==='Desligado') p.avaliadores=[]; });
+    const p=pessoaDe(s.dataset.si);
+    mudar(`situação de ${p.nome}`, ()=>{ LGH.definirCampoPessoa(S, p.id, org, 'situacao', s.value);
+      if(s.value==='Desligado') LGH.limparSuperiores(S, p.id, org, autorAtual()); });
     pintarMatriz();
   });
   document.querySelectorAll('[data-st]').forEach(s=>s.onchange=()=>{
-    const p=PESSOAS.find(x=>x.id===s.dataset.st);
-    mudar(`setor de ${p.nome}`, ()=>{ p.setor=s.value; herdarAvaliadores(p); }); pintarMatriz();
+    const p=pessoaDe(s.dataset.st);
+    mudar(`setor de ${p.nome}`, ()=>{ LGH.definirCampoPessoa(S, p.id, org, 'setor', s.value); }); pintarMatriz();
   });
   document.querySelectorAll('[data-add]').forEach(s=>s.onchange=()=>{
-    const p=PESSOAS.find(x=>x.id===s.dataset.add);
-    if(s.value && !p.avaliadores.includes(s.value))
-      mudar(`avaliador de ${p.nome}`, ()=>p.avaliadores.push(s.value));
+    const p=pessoaDe(s.dataset.add);
+    if(!s.value) return;
+    const minhas = p.atuacoes.map(id=>porId.get(id)).filter(Boolean);
+    const alvo = minhas.find(a=>!a.superiorId && !a.ehRaiz) || minhas[0];
+    const r = tentarMudar(`avaliador de ${p.nome}`, ()=>LGH.definirSuperior(S, alvo.id, s.value, autorAtual()));
     pintarMatriz();
+    $('#lote-msg').textContent = r.ok
+      ? (r.valor.acao==='criada' ? `${p.nome} passou a ter ${p.atuacoes.length+1} atuações, uma por avaliador. Cada uma gera a sua avaliação.` : '')
+      : `Não foi possível: ${avisoErro(r.erro)}.`;
   });
   document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{
-    const p=PESSOAS.find(x=>x.id===b.dataset.rm);
-    mudar(`avaliador de ${p.nome}`, ()=>{ p.avaliadores = p.avaliadores.filter(n=>n!==b.dataset.nome); });
+    const a = porId.get(b.dataset.rm), p = a && pessoaDe(a.pessoaRef);
+    if(!p) return;
+    tentarMudar(`avaliador de ${p.nome}`, ()=>LGH.removerSuperior(S, a.id, autorAtual()));
     pintarMatriz();
   });
+}
+/* Sem avaliador: nenhuma atuação com superior e não é a raiz da organização (a raiz é avaliada pela estrutura corporativa). */
+function semAvaliador(p){ return !p.avaliadores.length && !p.raiz; }
+/* Atuações com marca de líder na organização selecionada, por nome: são as opções de avaliador. */
+function lideresDaOrganizacao(){
+  const nomes = new Map((S.views.atuacoes || []).filter(a=>a.podeLiderar).map(a=>[a.id, fichaAvaliador(a.id).nome]));
+  return (S.views.atuacoes || []).filter(a=>a.podeLiderar).sort((x,y)=>nomes.get(x.id).localeCompare(nomes.get(y.id),'pt-BR') || (x.id<y.id?-1:1));
+}
+/* Como mudar(), mas uma recusa do adaptador (erro com codigo) não deixa passo vazio no Desfazer. */
+function tentarMudar(desc, fn){
+  const n = HIST.length;
+  try{ let valor; mudar(desc, ()=>{ valor = fn(); }); return {ok:true, valor}; }
+  catch(e){ if(HIST.length > n) { const h = HIST.pop(); aplicarInstantanea(h.snap); } return {ok:false, erro:e}; }
 }
 
 function semFiltro(){
@@ -1222,14 +1377,14 @@ function montarLote(lista){
   if(!pode('definirAvaliador') || !lista.length){ barra.hidden = true; desarmarLote(); return; }
   barra.hidden = false;
   const atual = $('#lote-av').value;
-  const LID = PESSOAS.filter(x=>x.lider).map(x=>x.nome).sort();
+  const LID = lideresDaOrganizacao();
   $('#lote-av').innerHTML = '<option value="">Escolha o avaliador</option>' +
-    LID.map(n=>`<option value="${esc(n)}" ${n===atual?'selected':''}>${esc(rotuloAvaliador(n))}</option>`).join('');
+    LID.map(a=>`<option value="${esc(a.id)}" ${a.id===atual?'selected':''}>${esc(rotuloAvaliador(a.id))}</option>`).join('');
   if(!S.armado){
     const escolhido = $('#lote-av').value;
     const setoresSel = [...new Set(lista.map(p=>p.setor))];
     let txt = semFiltro()
-      ? `<span class="perigo">Nenhum filtro ativo: isso atinge as ${lista.length} pessoas da unidade.</span>`
+      ? `<span class="perigo">Nenhum filtro ativo: isso atinge as ${lista.length} pessoas de ${esc(nomeOrganizacao())}.</span>`
       : `${lista.length} ${lista.length===1?'pessoa selecionada':'pessoas selecionadas'} pelos filtros acima.`;
     if(escolhido){
       const f = fichaAvaliador(escolhido);
@@ -1241,10 +1396,11 @@ function montarLote(lista){
   }
 }
 function precisaConfirmar(lista){ return lista.length > 20 || semFiltro(); }
-function aplicarLote(nome){
+function aplicarLote(supId){
   const lista = S.filtrados || [];
   if(!lista.length) return;
-  const acao = nome ? 'definir' : 'limpar';
+  const nome = supId ? fichaAvaliador(supId).nome : '';
+  const acao = supId ? 'definir' : 'limpar';
   if(precisaConfirmar(lista) && (!S.armado || S.armado.acao!==acao || S.armado.nome!==nome)){
     S.armado = {acao, nome, n:lista.length};
     const b=$('#m-lote'); b.classList.add('armada');
@@ -1257,15 +1413,20 @@ function aplicarLote(nome){
     return;
   }
   let msg='';
-  mudar(nome? `avaliador de ${lista.length} pessoas` : `remoção de avaliador de ${lista.length} pessoas`, ()=>{
-    if(nome){
-      const alvos = lista.filter(p=>p.nome !== nome);
-      alvos.forEach(p=>{ p.avaliadores = [nome]; });
-      const pulados = lista.length - alvos.length;
-      msg = `${alvos.length} ${alvos.length===1?'pessoa recebeu':'pessoas receberam'} ${nome}` +
-        (pulados ? ', e a própria pessoa foi ignorada (ninguém se autoavalia).' : '.');
+  const org = S.organizacaoSelecionada, autor = autorAtual();
+  mudar(supId? `avaliador de ${lista.length} pessoas` : `remoção de avaliador de ${lista.length} pessoas`, ()=>{
+    if(supId){
+      let ok = 0; const pulados = {autoavaliacao:0, raiz_com_superior:0, outros:[]};
+      lista.forEach(p=>{
+        try{ LGH.definirUnicoSuperior(S, p.id, org, supId, autor); ok++; }
+        catch(e){ if(e.codigo in pulados && e.codigo!=='outros') pulados[e.codigo]++; else pulados.outros.push(p.nome); }
+      });
+      msg = `${ok} ${ok===1?'pessoa recebeu':'pessoas receberam'} ${nome}.` +
+        (pulados.autoavaliacao ? ' A própria pessoa foi ignorada (ninguém se autoavalia).' : '') +
+        (pulados.raiz_com_superior ? ' A raiz da organização foi ignorada (é avaliada pela estrutura corporativa).' : '') +
+        (pulados.outros.length ? ` Recusado por criar ciclo ou por regra da árvore: ${pulados.outros.join(', ')}.` : '');
     } else {
-      lista.forEach(p=>{ p.avaliadores = []; });
+      lista.forEach(p=>{ LGH.limparSuperiores(S, p.id, org, autor); });
       msg = `Avaliador removido de ${lista.length} ${lista.length===1?'pessoa':'pessoas'}.`;
     }
   });
@@ -1284,11 +1445,13 @@ function atualizarDesfazer(){
 /* 4 formulário */
 function renderForm(){
   const sel=$('#fm-colab');
-  const lista = visiveis();
+  const lista = itensVisiveis();   /* uma opção por atuação: a chave da avaliação é a atuação (spec 3.7) */
+  $('#fm-unidade').textContent = nomeOrganizacao();
   if(!lista.length){ $('#fm-pilares').innerHTML='<p class="skel">Nenhum colaborador no seu escopo.</p>'; return; }
-  if(!S.colab || !lista.some(p=>p.id===S.colab.id)) S.colab = lista[0];
-  sel.innerHTML = lista.map(p=>`<option value="${p.id}" ${p.id===S.colab.id?'selected':''}>${esc(p.nome)} — ${esc(p.cargo)}</option>`).join('');
-  sel.onchange = ()=>{S.colab=PESSOAS.find(p=>p.id===sel.value); S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; renderForm()};
+  const atualId = idAtuacaoDe(S.colab);
+  S.colab = lista.find(p=>p.atuacaoId===atualId) || lista[0];
+  sel.innerHTML = lista.map(p=>`<option value="${esc(p.atuacaoId)}" ${p.atuacaoId===S.colab.atuacaoId?'selected':''}>${esc(p.nome)}, ${esc(p.funcao||p.cargo)}${p.totalAtuacoes>1?` · ${p.ordem}ª atuação`:''}</option>`).join('');
+  sel.onchange = ()=>{S.colab=colabPorAtuacao(sel.value); S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; renderForm()};
   $('#fm-tipo').value = S.tipo;
   $('#fm-tipo').onchange = ()=>{S.tipo=$('#fm-tipo').value; S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; renderForm()};
   $('#fm-aval').textContent = S.perfil ? S.perfil.nome : (S.colab.avaliadores[0] || 'não definido');
@@ -1310,7 +1473,7 @@ function renderForm(){
     </div>`}).join('')}</div>`).join('');
   $('#fm-alerta').hidden = true;
   const pend = S.perfil && S.perfil.papel==='avaliador'
-    ? avaliadosDe(S.perfil.nome).filter(p=>!concluida(p)).length : 0;
+    ? itensDoAvaliador().filter(p=>!concluida(p)).length : 0;
   $('#fm-prazo').innerHTML = bannerPrazo(pend);
   pintarHistorico();
   const env = enviadaAtual();
@@ -1394,7 +1557,10 @@ function bannerPrazo(pendentes){
     ${pendentes>0?`Você tem ${pendentes} ${pendentes===1?'avaliação pendente':'avaliações pendentes'}.`:'Tudo entregue.'}</span></div>`;
 }
 const ENVIADAS = {};
-function chaveAval(){ return S.colab ? S.colab.id + '|' + S.tipo : ''; }
+/* Chave da avaliação (spec 3.7, ruling R5): atuação + tipo. S.colab é o registro da atuação ({...pessoa, atuacaoId});
+   aceita também a própria atuação (que tem pessoaRef e id). Sem atuação, não há chave. */
+function idAtuacaoDe(c){ return c ? (c.atuacaoId || (c.pessoaRef ? c.id : null)) : null; }
+function chaveAval(){ const id = idAtuacaoDe(S.colab); return id ? id + '|' + S.tipo : ''; }
 function versoes(){ return ENVIADAS[chaveAval()] || []; }
 function enviadaAtual(){ const v = versoes(); return v.length ? v[v.length-1] : null; }
 function agora(){
@@ -1605,7 +1771,7 @@ $('#rel-gerar').onclick = async ()=>{
 
 Colaborador: ${S.colab.nome.split(' ')[0]}
 Cargo: ${S.colab.cargo}
-Equipe: ${S.colab.equipe}, Hotel Laghetto Golden
+Equipe: ${S.colab.equipe}, ${nomeOrganizacao()}
 Formulário: ${FORMS[S.tipo].nome}
 Nota final: ${num(m)} de 5,0 (faixa: ${grau(m)})
 
@@ -1646,14 +1812,15 @@ function renderEvolucao(){
   if(!sel.options.length){
     sel.onchange = pintarEvolucao;
   }
-  const vis = visiveis();
-  sel.innerHTML = vis.map(p=>`<option value="${p.id}">${esc(p.nome)} — ${esc(p.cargo)}</option>`).join('')
+  const vis = itensVisiveis();
+  sel.innerHTML = vis.map(p=>`<option value="${esc(p.atuacaoId)}">${esc(p.nome)}, ${esc(p.funcao||p.cargo)}${p.totalAtuacoes>1?` · ${p.ordem}ª atuação`:''}</option>`).join('')
     || '<option value="">Nenhum colaborador no seu escopo</option>';
-  if(S.colab) sel.value = S.colab.id;
+  if(S.colab && vis.some(p=>p.atuacaoId===idAtuacaoDe(S.colab))) sel.value = idAtuacaoDe(S.colab);
   pintarEvolucao();
 }
 function enviadaDe(p){
-  const vc = ENVIADAS[p.id+'|colab'] || [], vl = ENVIADAS[p.id+'|lider'] || [];
+  const id = idAtuacaoDe(p);
+  const vc = ENVIADAS[id+'|colab'] || [], vl = ENVIADAS[id+'|lider'] || [];
   if(vc.length) return {tipo:'colab', reg: vc[vc.length-1], versoes: vc.length};
   if(vl.length) return {tipo:'lider', reg: vl[vl.length-1], versoes: vl.length};
   return null;
@@ -1661,14 +1828,15 @@ function enviadaDe(p){
 /* v31, 03/11: Evolucao so com dado real. A simulacao de ciclo anterior (notaAnterior e notasPadrao) foi retirada a pedido de Marcelo. */
 function enviosPorCiclo(p){
   const todos = [];
-  ['colab','lider'].forEach(tipo => (ENVIADAS[p.id+'|'+tipo]||[]).forEach(v => todos.push({...v, tipo: v.tipo||tipo})));
+  const id = idAtuacaoDe(p);
+  ['colab','lider'].forEach(tipo => (ENVIADAS[id+'|'+tipo]||[]).forEach(v => todos.push({...v, tipo: v.tipo||tipo})));
   const porCiclo = new Map();
   todos.forEach(v => { const k = v.ciclo == null ? 'sem' : v.ciclo; const atual = porCiclo.get(k); if(!atual || (v.versao||0) > (atual.versao||0)) porCiclo.set(k, v); });
   return porCiclo;
 }
 function nomeCiclo(id){ const c = CICLOS.find(x=>x.id===id); return c ? c.nome : 'Ciclo não registrado'; }
 function pintarEvolucao(){
-  const p = PESSOAS.find(x=>x.id===$('#ev-colab').value) || visiveis()[0];
+  const p = ($('#ev-colab').value && colabPorAtuacao($('#ev-colab').value)) || itensVisiveis()[0];
   if(!p) return;
   const porCiclo = enviosPorCiclo(p);
   const ids = [...porCiclo.keys()].filter(k=>k!=='sem').sort((a,b)=>a-b);
@@ -1716,41 +1884,47 @@ function pintarEvolucao(){
 
 /* 7 painel do RH */
 function renderRH(){
+  /* Plano B: tudo é da organização selecionada (nunca a rede inteira). A unidade de avaliação é a atuação:
+     conclusão, sem avaliador e líderes contam atuações; pessoas e faixa etária contam pessoas. */
+  const org = nomeOrganizacao();
   const rede = S.perfil && S.perfil.nivel==='N6';
   $('#rh-sub').textContent = rede
-    ? 'Visão da holding. O piloto roda no Hotel Laghetto Golden; as demais 36 filiais entram depois da validação.'
-    : 'Hotel Laghetto Golden, Gramado. Dois CNPJs na mesma unidade operacional.';
-  const doCiclo=AVALIAVEIS.filter(noCiclo);
+    ? `Visão da holding sobre ${org}. Troque a organização no topo para ver outra.`
+    : `${org}. A hierarquia segue a unidade operacional, não o CNPJ.`;
+  const itens = (S.views.atuacoes || []).map(a=>LGH.colabDe(S, a)).filter(Boolean);
+  const doCiclo = itens.filter(noCiclo);
+  const pessoasNoCiclo = AVALIAVEIS.filter(noCiclo);
   const tot=doCiclo.length, ok=doCiclo.filter(concluida).length;
-  const sem=doCiclo.filter(p=>!p.avaliadores.length);
-  const fora=AVALIAVEIS.length-tot;
+  const sem=doCiclo.filter(p=>!p.superiorId && !p.raiz);
+  const fora=AVALIAVEIS.length-pessoasNoCiclo.length;
   const FAIXAS = ['até 24','25 a 34','35 a 44','45 a 54','55 ou mais'];
-  const contFaixa = {}; doCiclo.forEach(p=>{ if(p.faixaEtaria) contFaixa[p.faixaEtaria]=(contFaixa[p.faixaEtaria]||0)+1; });
+  const contFaixa = {}; pessoasNoCiclo.forEach(p=>{ if(p.faixaEtaria) contFaixa[p.faixaEtaria]=(contFaixa[p.faixaEtaria]||0)+1; });
   const faixaTop = FAIXAS.reduce((a,f)=> (contFaixa[f]||0)>(contFaixa[a]||0) ? f : a, FAIXAS[0]);
   const comFaixa = Object.values(contFaixa).reduce((a,b)=>a+b,0);
   $('#rh-kpis').innerHTML = [
-    ['Colaboradores', tot, '', fora? `no ciclo (${fora} fora)` : 'no ciclo'],
-    ['Avaliações concluídas', Math.round(ok/tot*100)+'%', '', ok+' de '+tot],
+    ['Colaboradores', pessoasNoCiclo.length, '', fora? `no ciclo (${fora} fora)` : 'no ciclo'],
+    ['Avaliações concluídas', tot ? Math.round(ok/tot*100)+'%' : 'n/d', '', ok+' de '+tot+' (uma por atuação)'],
     ['Sem avaliador', sem.length, sem.length?'alerta':'', 'bloqueiam a abertura'],
     ['Faixa etária mais comum', comFaixa ? faixaTop : 'sem dado', '', comFaixa ? Math.round((contFaixa[faixaTop]||0)/comFaixa*100)+'% de '+comFaixa+' com faixa informada' : 'faixa etária não informada']
   ].map(([l,v,c,s])=>`<div class="kpi ${c}"><div class="v">${v}</div><div class="l">${l}<br><span style="opacity:.75">${s}</span></div></div>`).join('');
 
   $('#rh-prazo').innerHTML = bannerPrazo(sem.length ? 0 : tot - ok);
-  $('#rh-equipes').innerHTML = EQUIPES.map(eq=>{
-    const m=daEquipe(eq), f=m.filter(concluida).length, pc=m.length?Math.round(f/m.length*100):0;
-    const semA=m.filter(p=>!p.avaliadores.length).length;
+  const equipes = [...new Set(itens.map(p=>p.equipe))].sort();
+  $('#rh-equipes').innerHTML = equipes.map(eq=>{
+    const m=itens.filter(p=>p.equipe===eq), f=m.filter(concluida).length, pc=m.length?Math.round(f/m.length*100):0;
+    const semA=m.filter(p=>!p.superiorId && !p.raiz).length;
     return `<div class="ev"><span class="nm">${esc(eq)}${semA?` <span class="tag t-crit">${semA} sem avaliador</span>`:''}</span>
       <span class="track"><i class="b" style="left:0;width:${pc}%"></i></span>
       <span class="delta">${pc}%</span></div>`;
   }).join('');
 
   const porCnpj={};
-  AVALIAVEIS.forEach(p=>{(porCnpj[p.filial]=porCnpj[p.filial]||{t:0,ok:0,cnpj:p.cnpj}); porCnpj[p.filial].t++; if(concluida(p))porCnpj[p.filial].ok++});
+  itens.forEach(p=>{(porCnpj[p.filial]=porCnpj[p.filial]||{t:0,ok:0,cnpj:p.cnpj}); porCnpj[p.filial].t++; if(concluida(p))porCnpj[p.filial].ok++});
   $('#rh-cnpj').innerHTML = Object.entries(porCnpj).map(([f,v])=>{
     const pc=Math.round(v.ok/v.t*100);
-    return `<div class="ev"><span class="nm">${esc(f)}<br><span class="mono" style="font-size:.74rem;color:var(--muted)">${esc(v.cnpj)} · ${v.t} pessoas</span></span>
+    return `<div class="ev"><span class="nm">${esc(f)}<br><span class="mono" style="font-size:.74rem;color:var(--muted)">${esc(v.cnpj)} · ${v.t} ${v.t===1?'avaliação':'avaliações'}</span></span>
       <span class="track"><i class="b" style="left:0;width:${pc}%"></i></span><span class="delta">${pc}%</span></div>`;
-  }).join('') + `<p class="nota-faixa">A governança do Golden é avaliada pela Ijuliane Weschenfelder, que é do CNPJ do Vita. A hierarquia segue a unidade operacional, não o CNPJ.</p>`;
+  }).join('') + `<p class="nota-faixa">A hierarquia segue a unidade operacional, não o CNPJ: quem é pago por outro CNPJ e atua aqui é avaliado aqui.</p>`;
 
   const porSetorConc = SETORES.map(s=>{
     const m = doCiclo.filter(p=>p.setor===s);
@@ -1762,14 +1936,15 @@ function renderRH(){
      <span class="track"><i class="b" style="left:0;width:${x.pc}%"></i></span>
      <span class="delta">${x.pc}% <span style="color:var(--muted);font-weight:400">${x.f}/${x.t}</span></span></div>`).join('');
 
-  const lideres = [...new Set(doCiclo.flatMap(p=>p.avaliadores))].sort();
-  $('#rh-lideres').querySelector('tbody').innerHTML = lideres.map(n=>{
-    const m = doCiclo.filter(p=>p.avaliadores.includes(n));
+  const supIds = [...new Set(doCiclo.map(p=>p.superiorId).filter(Boolean))];
+  const lideres = supIds.map(id=>({id, f:fichaAvaliador(id)})).sort((a,b)=>a.f.nome.localeCompare(b.f.nome,'pt-BR'));
+  $('#rh-lideres').querySelector('tbody').innerHTML = lideres.map(({id, f:ficha})=>{
+    const m = doCiclo.filter(p=>p.superiorId===id);
     const f = m.filter(concluida).length;
     const pc = m.length? Math.round(f/m.length*100):0;
     const eqs = [...new Set(m.map(p=>p.equipe))].length;
     const cor = pc===100?'t-ok':pc===0?'t-crit':'t-warn';
-    return `<tr><td><b>${esc(nomeCurto(n))}</b><br><span style="color:var(--muted);font-size:.78rem">${esc(fichaAvaliador(n).cargo)}</span></td>
+    return `<tr><td><b>${esc(nomeCurto(ficha.nome))}</b><br><span style="color:var(--muted);font-size:.78rem">${esc(ficha.cargo)}${ficha.total>1?` · ${ficha.ordem}ª atuação`:''}</span></td>
       <td class="num">${eqs}</td><td class="num">${f} de ${m.length}</td>
       <td><span class="tag ${cor}">${pc}%</span></td></tr>`;
   }).join('') || '<tr><td colspan="4">Nenhum avaliador atribuído.</td></tr>';
@@ -1863,34 +2038,37 @@ try{
 }catch(e){}
 pintarBotaoTema();
 
-/* ===== BOOT (Plano B, Tarefa 1) =====
-   Carrega data/base.json (base pública, sem CPF) e data/piloto-golden.json (setor, equipe e avaliadores já definidos no piloto,
-   por nome normalizado). PESSOAS é uma VISÃO DE COMPATIBILIDADE para as telas atuais; a Tarefa 3 a substitui pelo adaptador real. */
-function nomeNormalizado(n){ return String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
-function visaoCompat(base, piloto){
-  const porPessoa = new Map();
-  (base.vinculos||[]).forEach(v=>{ (porPessoa.get(v.pessoaId)||porPessoa.set(v.pessoaId,[]).get(v.pessoaId)).push(v); });
-  return base.pessoas.map(pe=>{
-    const vs = porPessoa.get(pe.id)||[];
-    const v = vs.find(x=>x.regime==='CLT') || vs[0] || {};
-    const g = piloto[nomeNormalizado(pe.nome)];
-    return { id:pe.id, nome:pe.nome, cargo:v.cargo||'Sem cargo', cargoCod:v.codigo||'', filial:v.filial||v.empresa||'Sem filial', cnpj:v.empresa||'',
-      setor:g?g.setor:'Sem setor', equipe:g?g.equipe:'Sem setor', avaliadores:g?[...g.avaliadores]:[], lider:g?!!g.lider:false,
-      externo:false, situacao:g?g.situacao:'Ativo', funcao:g?(g.funcao||v.cargo):v.cargo, faixaEtaria:pe.faixaEtaria };
-  });
-}
-/* Os blocos que leem o banco e dependem de PESSOAS esperam o boot: sem isso, a leitura do banco que chega antes do fetch
-   roda sobre PESSOAS vazio e o persistir() seguinte sobrescreve a configuração salva com os padrões do piloto. */
+/* ===== BOOT (Plano B, Tarefas 1 e 3) =====
+   Carrega data/base.json (base pública, sem CPF), data/piloto-golden.json (setor, líder e avaliadores validados no piloto,
+   por nome normalizado) e a tabela de equivalência de organizações; monta S.organizacoes e S.atuacoes pelo bundle (LGH) e
+   reconstrói as visões da organização selecionada. window.LGH_CONFIG (opcional, homologação e testes) troca fusões,
+   organização do piloto e acrescenta atuações já definidas pelo RH. */
+/* Os blocos que leem o banco e dependem das visões esperam o boot: sem isso, a leitura do banco que chega antes do fetch
+   roda sobre visões vazias e o persistir() seguinte sobrescreve a configuração salva com os padrões do piloto. */
 function aposBoot(fn){ if(S.pronto) fn(); else document.addEventListener('lgh-boot-pronto', fn, {once:true}); }
 async function boot(){
+  if(typeof LGH === 'undefined') throw new Error('js/lgh.bundle.js não carregou (rode npm run build:bundle)');
+  const cfg = window.LGH_CONFIG || {};
   const r = await fetch('data/base.json');
   S.base = await r.json();
+  if(!S.base || !Array.isArray(S.base.pessoas) || !Array.isArray(S.base.vinculos)) throw new Error('data/base.json sem pessoas ou vínculos');
   let piloto = {};
   try{ const rp = await fetch('data/piloto-golden.json'); if(rp.ok) piloto = await rp.json(); }catch(e){}
+  let equivalencias = [];
+  try{ const re = await fetch('js/modelo/equivalencia-organizacoes.json'); if(re.ok){ const t = await re.json(); if(Array.isArray(t)) equivalencias = t; } }catch(e){}
   S.piloto = piloto;
   S.pessoas = S.base.pessoas;
-  PESSOAS = visaoCompat(S.base, piloto);
-  recalcularDerivados();
+  S.pessoasPorId = new Map(S.pessoas.map(p=>[p.id, p]));
+  const organizacaoPiloto = cfg.organizacaoPiloto || LGH.ORGANIZACAO_PILOTO;
+  S.organizacoes = LGH.organizacoesDe(S.base, cfg.fusoes || LGH.FUSOES);
+  const carga = LGH.atuacoesIniciais(S.base, S.organizacoes, piloto, { equivalencias, organizacaoPiloto });
+  S.atuacoes = carga.atuacoes;
+  S.semOrganizacao = carga.semOrganizacao;
+  S.logCarga = carga.log;
+  for(const e of cfg.atuacoesExtras || []) S.atuacoes.push({origem:'definido', metodoInferencia:null, confirmadaPor:null, podeLiderar:false, ...e});
+  S.organizacaoSelecionada = LGH.organizacaoInicial(S, cfg.organizacaoInicial || organizacaoPiloto);
+  reconstruirViews();
+  ORIGINAL = instantanea();   /* "Restaurar configuração inicial" volta ao estado da carga */
   montarNav(); renderLogin(); irPara('login');
   S.pronto = true;
   document.dispatchEvent(new CustomEvent('lgh-boot-pronto'));

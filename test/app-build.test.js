@@ -116,19 +116,26 @@ test('painel do RH renderiza por faixa etária, sem idade exata', async () => {
   assert.equal(/Idade média|NaN/.test(document.querySelector('#rh-kpis').textContent + html + document.querySelector('#rh-idade-cargo').innerHTML), false);
 });
 
+// Plano B, Tarefa 3 (R4): PESSOAS é a visão da organização selecionada e os avaliadores vêm das atuações, não do texto do piloto.
+const OPCOES_GOLDEN = { fusoes: [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOLDEN RESORT'] }], organizacaoPiloto: 'GOLDEN' };
 test('boot usa o piloto Golden por nome normalizado e tolera piloto ausente', async () => {
   const piloto = { 'CAMAREIRA TESTE': { nome: 'Camareira Teste', setor: 'Governança', equipe: 'Governança', lider: false, avaliadores: ['Fulano'], funcao: 'Camareira', situacao: 'Ativo' } };
-  const com = await carregarPagina(lerFixture('base-mini.json'), piloto);
+  const com = await carregarPagina(lerFixture('base-mini.json'), piloto, null, OPCOES_GOLDEN);
   const cam = com.S.pessoas.find(p => p.id === 'CAM');
   assert.ok(cam);
   const visao = com.window.eval('PESSOAS').find(p => p.id === 'CAM');
   assert.equal(visao.setor, 'Governança');
-  assert.equal(JSON.stringify(visao.avaliadores), '["Fulano"]');
-  const sem = await carregarPagina(lerFixture('base-mini.json'));
+  assert.equal(visao.nome, 'Camareira Teste');
+  assert.equal(JSON.stringify(visao.avaliadores), '[]', 'avaliador do piloto que não existe na base não vira avaliador');
+  assert.ok(com.S.logCarga.some(l => l.codigo === 'avaliador_nao_encontrado' && l.avaliador === 'Fulano'));
+  const sem = await carregarPagina(lerFixture('base-mini.json'), {}, null, OPCOES_GOLDEN);
   const v2 = sem.window.eval('PESSOAS').find(p => p.id === 'CAM');
   assert.equal(v2.setor, 'Sem setor');
   assert.equal(v2.lider, false);
-  assert.equal(sem.window.eval('PESSOAS').length, 14);
+  assert.equal(sem.window.eval('PESSOAS').length, 8, 'só quem tem atuação no Golden (sem piloto: sem realocação nem criação)');
+  const padrao = await carregarPagina(lerFixture('base-mini.json'));
+  assert.equal(padrao.S.organizacaoSelecionada, 'BRANO', 'sem a organização do piloto, a primeira unidade');
+  assert.equal(padrao.window.eval('PESSOAS').length, 4);
 });
 
 // Banco do artefato simulado: responde na hora, antes dos fetches do boot, e registra toda gravação com o estado do boot.
@@ -152,7 +159,7 @@ const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 test('corrida banco x boot: líder salvo no banco é aplicado após o boot e nada vazio é regravado antes', async () => {
   const docs = { 'config/lideres-e-contas': { lideres: ['CAM'], usuarios: [{ nome: 'USUARIO SINTETICO', cargo: 'x', cpf: '', email: '', papel: 'avaliador', nivel: 'N1', escopo: 'x', ativo: true }], atualizadoEm: '2026-11-03T00:00:00.000Z' } };
   const stub = bancoFalso(docs);
-  const { window, S } = await carregarPagina(lerFixture('base-mini.json'), {}, stub);
+  const { window, S } = await carregarPagina(lerFixture('base-mini.json'), {}, stub, OPCOES_GOLDEN);
   await tick();
   assert.equal(S.pronto, true);
   const visao = window.eval('PESSOAS');

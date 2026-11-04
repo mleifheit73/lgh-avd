@@ -35,6 +35,7 @@ export async function carregarPagina(baseJson, piloto = {}, claudeStub = null, o
       if (claudeStub) claudeStub.janela = window; // o stub pode consultar o estado da página (ex.: S.pronto)
       window.claude = claudeStub || { use: async () => null };
       window.scrollTo = () => {};
+      window.HTMLElement.prototype.scrollIntoView = function () {};
       if (opcoes) window.LGH_CONFIG = JSON.parse(JSON.stringify(opcoes));
       window.eval(bundle);
       window.fetch = async (url) => {
