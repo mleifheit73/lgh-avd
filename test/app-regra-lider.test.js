@@ -172,3 +172,19 @@ test('M2: marca de líder precisa ser estritamente true; ausente é recusada em 
   assert.equal(mo.adicionarNaRede(S, ['p:PJ-SEM-ORG'], dr.id, 'RH').codigo, 'superior_sem_marca_de_lider');
   assert.equal(S.atuacoes.find(a => a.id === coz).superiorId, null, 'nada mudou');
 });
+
+test('M3: tirar a marca de líder de quem tem equipe é recusado mesmo com homônimo na base', async () => {
+  const b = lerFixture('base-mini.json');
+  const nomeSup = b.pessoas.find(p => p.id === 'SUP').nome;
+  b.pessoas.find(p => p.id === 'GAR1').nome = nomeSup;   /* homônimo sintético do supervisor */
+  const { window, S, erros } = await carregarPagina(b, lerFixture('piloto-mini.json'), null, OPCOES);
+  window.eval(ADMIN);
+  window.eval("trocarOrganizacao('GOLDEN')");
+  assert.equal(window.LGH.pessoaIdPorNome(S, nomeSup), null, 'premissa: o nome sozinho não resolve');
+  const r = window.eval("LGH_LID.definirLider(PESSOAS.find((p) => p.id === 'SUP'), false)");
+  assert.equal(r.ok, false);
+  assert.match(r.msg, /ainda avalia 1 pessoa/);
+  assert.equal(S.atuacoes.find(a => a.id === 'GOLDEN|SUP|1').podeLiderar, true, 'a marca ficou');
+  assert.equal(window.eval("avaliadosDe('SUP').length"), 1, 'o id resolve');
+  assert.deepEqual(erros.map(String), []);
+});

@@ -802,10 +802,12 @@ function equipesDe(nome){
   if(!pid) return [];
   return [...new Set(LGH.avaliadosDe(S, pid, S.organizacaoSelecionada).map(a=>a.setor||LGH.SEM_SETOR))].sort();
 }
-/* avaliadosDe(nome): itens de avaliação (um por atuação) supervisionados pela pessoa desse nome na organização selecionada. */
+/* avaliadosDe(pessoaId ou nome): itens de avaliação (um por atuação) supervisionados pela pessoa na organização selecionada.
+   M3: passe o id. O nome só resolve quando não há homônimo (a base real tem dois pares); com homônimo devolve [],
+   e quem decide regra (ex.: tirar marca de líder de quem tem equipe, R20) não pode depender disso. */
 function avaliadosDe(a, b, c){
   if(a && typeof a === 'object') return LGH.avaliadosDe(a, b, c);
-  const pid = LGH.pessoaIdPorNome(S, a);
+  const pid = (S.pessoasPorId && S.pessoasPorId.has(a)) ? a : LGH.pessoaIdPorNome(S, a);
   if(!pid || !S.organizacaoSelecionada) return [];
   return LGH.avaliadosDe(S, pid, S.organizacaoSelecionada).map(x=>LGH.colabDe(S, x)).filter(Boolean);
 }
@@ -2402,7 +2404,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   }
   function definirLider(p, valor){
     if(!valor){
-      const n = avaliadosDe(p.nome).length;
+      const n = avaliadosDe(p.id).length;   /* M3: pelo id; pelo nome, homônimo dava 0 e deixava tirar a marca de quem tem equipe */
       if(n) return {ok:false, msg:`${p.nome} ainda avalia ${n} ${n===1?'pessoa':'pessoas'}. Remova ${n===1?'esse avaliado':'esses avaliados'} na Matriz antes de retirar a marca de líder.`};
     }
     mudar(`${valor?'marcar':'desmarcar'} ${p.nome} como líder`, ()=>{ p.atuacoes.forEach(id => LGH.marcarLider(S, id, valor)); });
