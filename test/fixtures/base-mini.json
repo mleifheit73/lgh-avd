@@ -1,0 +1,327 @@
+{
+ "geradoEm": "2026-11-03T12:00:00.000Z",
+ "commit": "sintetico",
+ "sintetico": true,
+ "pessoas": [
+  {
+   "id": "CAM",
+   "nome": "CAMAREIRA TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0101010101010101010101010101010101010101010101010101010101010101",
+   "faixaEtaria": "25 a 34",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "SUP",
+   "nome": "SUPERVISOR DE GOVERNANCA TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0202020202020202020202020202020202020202020202020202020202020202",
+   "faixaEtaria": "35 a 44",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "GG",
+   "nome": "GERENTE GERAL TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0303030303030303030303030303030303030303030303030303030303030303",
+   "faixaEtaria": "45 a 54",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "ANA",
+   "nome": "ANA TESTE DUPLA FILIAL",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0404040404040404040404040404040404040404040404040404040404040404",
+   "faixaEtaria": "25 a 34",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "CEO-REDE",
+   "nome": "CEO DA REDE TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0505050505050505050505050505050505050505050505050505050505050505",
+   "faixaEtaria": "55 ou mais",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "DR",
+   "nome": "DIRETOR REGIONAL TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0606060606060606060606060606060606060606060606060606060606060606",
+   "faixaEtaria": "45 a 54",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "DUPLO-VINCULO",
+   "nome": "PESSOA CLT E PJ TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0707070707070707070707070707070707070707070707070707070707070707",
+   "faixaEtaria": "35 a 44",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "PJ-SEM-ORG",
+   "nome": "PESSOA PJ SEM FILIAL TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": null,
+   "faixaEtaria": null,
+   "nomesAlternativos": []
+  },
+  {
+   "id": "REC1",
+   "nome": "RECEPCIONISTA UM TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0909090909090909090909090909090909090909090909090909090909090909",
+   "faixaEtaria": "até 24",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "COZ1",
+   "nome": "COZINHEIRO UM TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+   "faixaEtaria": "35 a 44",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "GAR1",
+   "nome": "GARCOM UM TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+   "faixaEtaria": "até 24",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "BR1",
+   "nome": "RECEPCIONISTA BRANO TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+   "faixaEtaria": "25 a 34",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "BR2",
+   "nome": "CAMAREIRA BRANO TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+   "faixaEtaria": "45 a 54",
+   "nomesAlternativos": []
+  },
+  {
+   "id": "BR3",
+   "nome": "SUPERVISOR BRANO TESTE",
+   "status": "ativo",
+   "motivoStatus": null,
+   "cpfHash": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+   "faixaEtaria": "35 a 44",
+   "nomesAlternativos": []
+  }
+ ],
+ "vinculos": [
+  {
+   "pessoaId": "CAM",
+   "regime": "CLT",
+   "empresa": "GOLDEN A&B",
+   "empresaOriginal": "GOLDEN A&B",
+   "cargo": "CAMAREIRA",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN A&B",
+   "codigo": "101",
+   "chave": "GOLDEN A&B|101"
+  },
+  {
+   "pessoaId": "SUP",
+   "regime": "CLT",
+   "empresa": "GOLDEN RESORT",
+   "empresaOriginal": "GOLDEN RESORT",
+   "cargo": "SUPERVISOR DE GOVERNANCA",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN RESORT",
+   "codigo": "102",
+   "chave": "GOLDEN RESORT|102"
+  },
+  {
+   "pessoaId": "ANA",
+   "regime": "CLT",
+   "empresa": "GOLDEN RESORT",
+   "empresaOriginal": "GOLDEN RESORT",
+   "cargo": "ASSISTENTE ADMINISTRATIVO",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN RESORT",
+   "codigo": "103",
+   "chave": "GOLDEN RESORT|103"
+  },
+  {
+   "pessoaId": "ANA",
+   "regime": "CLT",
+   "empresa": "BRANO",
+   "empresaOriginal": "BRANO",
+   "cargo": "ASSISTENTE ADMINISTRATIVO",
+   "inicio": "2022-03-01",
+   "filial": "BRANO",
+   "codigo": "201",
+   "chave": "BRANO|201"
+  },
+  {
+   "pessoaId": "DUPLO-VINCULO",
+   "regime": "CLT",
+   "empresa": "GOLDEN A&B",
+   "empresaOriginal": "GOLDEN A&B",
+   "cargo": "ANALISTA DE RESERVAS",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN A&B",
+   "codigo": "104",
+   "chave": "GOLDEN A&B|104"
+  },
+  {
+   "pessoaId": "DUPLO-VINCULO",
+   "regime": "PJ",
+   "empresa": "GOLDEN A&B",
+   "empresaOriginal": "GOLDEN A&B LTDA",
+   "cargo": "CONSULTOR DE RESERVAS",
+   "inicio": "2026-01-10"
+  },
+  {
+   "pessoaId": "REC1",
+   "regime": "CLT",
+   "empresa": "GOLDEN RESORT",
+   "empresaOriginal": "GOLDEN RESORT",
+   "cargo": "RECEPCIONISTA",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN RESORT",
+   "codigo": "105",
+   "chave": "GOLDEN RESORT|105"
+  },
+  {
+   "pessoaId": "COZ1",
+   "regime": "CLT",
+   "empresa": "GOLDEN A&B",
+   "empresaOriginal": "GOLDEN A&B",
+   "cargo": "COZINHEIRO",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN A&B",
+   "codigo": "106",
+   "chave": "GOLDEN A&B|106"
+  },
+  {
+   "pessoaId": "GAR1",
+   "regime": "CLT",
+   "empresa": "GOLDEN A&B",
+   "empresaOriginal": "GOLDEN A&B",
+   "cargo": "GARCOM",
+   "inicio": "2022-03-01",
+   "filial": "GOLDEN A&B",
+   "codigo": "107",
+   "chave": "GOLDEN A&B|107"
+  },
+  {
+   "pessoaId": "BR1",
+   "regime": "CLT",
+   "empresa": "BRANO",
+   "empresaOriginal": "BRANO",
+   "cargo": "RECEPCIONISTA",
+   "inicio": "2022-03-01",
+   "filial": "BRANO",
+   "codigo": "202",
+   "chave": "BRANO|202"
+  },
+  {
+   "pessoaId": "BR2",
+   "regime": "CLT",
+   "empresa": "BRANO",
+   "empresaOriginal": "BRANO",
+   "cargo": "CAMAREIRA",
+   "inicio": "2022-03-01",
+   "filial": "BRANO",
+   "codigo": "203",
+   "chave": "BRANO|203"
+  },
+  {
+   "pessoaId": "BR3",
+   "regime": "CLT",
+   "empresa": "BRANO",
+   "empresaOriginal": "BRANO",
+   "cargo": "SUPERVISOR DE GOVERNANCA",
+   "inicio": "2022-03-01",
+   "filial": "BRANO",
+   "codigo": "204",
+   "chave": "BRANO|204"
+  },
+  {
+   "pessoaId": "GG",
+   "regime": "PJ",
+   "empresa": "GOLDEN RESORT",
+   "empresaOriginal": "GOLDEN RESORT LTDA",
+   "cargo": "GERENTE GERAL",
+   "inicio": "2026-01-10"
+  },
+  {
+   "pessoaId": "CEO-REDE",
+   "regime": "PJ",
+   "empresa": "LAGHETTO ADMINISTRADORA DE HOTEIS",
+   "empresaOriginal": "LAGHETTO ADMINISTRADORA DE HOTEIS LTDA",
+   "cargo": "CEO DA REDE",
+   "inicio": "2026-01-10"
+  },
+  {
+   "pessoaId": "DR",
+   "regime": "PJ",
+   "empresa": "LAGHETTO ADMINISTRADORA DE HOTEIS",
+   "empresaOriginal": "LAGHETTO ADMINISTRADORA DE HOTEIS LTDA",
+   "cargo": "DIRETOR REGIONAL",
+   "inicio": "2026-01-10"
+  },
+  {
+   "pessoaId": "PJ-SEM-ORG",
+   "regime": "PJ",
+   "empresa": "EMPRESA SEM FILIAL",
+   "empresaOriginal": "EMPRESA SEM FILIAL LTDA",
+   "cargo": "CONSULTOR EXTERNO",
+   "inicio": "2026-01-10"
+  }
+ ],
+ "pendencias": [
+  {
+   "pessoaId": "PJ-SEM-ORG",
+   "codigo": "sem_cpf",
+   "detalhe": "Registro PJ sem CPF. Sem CPF não há login."
+  },
+  {
+   "pessoaId": "BR2",
+   "codigo": "possivel_duplicado",
+   "detalhe": "Nome parecido com outra pessoa da base (dado sintético)."
+  },
+  {
+   "pessoaId": "DR",
+   "codigo": "inicio_futuro",
+   "detalhe": "Início do vínculo posterior à data da carga (dado sintético)."
+  }
+ ],
+ "equivalenciaEmpresas": {
+  "GOLDEN RESORT": [
+   "GOLDEN RESORT LTDA"
+  ],
+  "GOLDEN A&B": [
+   "GOLDEN A&B LTDA"
+  ],
+  "BRANO": [
+   "BRANO HOTEIS LTDA"
+  ],
+  "LAGHETTO ADMINISTRADORA DE HOTEIS": [
+   "LAGHETTO ADMINISTRADORA DE HOTÉIS LTDA"
+  ]
+ }
+}

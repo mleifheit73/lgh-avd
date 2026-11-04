@@ -4,3 +4,9 @@ out/
 
 # Dados pessoais reais: nunca versionar. Obter do Projeto no claude.ai (ver README).
 data/
+
+# Artefato gerado (Plano B): base com nomes e cópias dos módulos
+app/data/
+app/js/carga/
+app/js/modelo/atuacao.js
+dist/

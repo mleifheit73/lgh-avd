@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "carga": "node src/cli/carga.js"
+    "carga": "node src/cli/carga.js",
+    "build:app": "node scripts/build-app.mjs"
   },
   "dependencies": {
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1"
   }
 }
