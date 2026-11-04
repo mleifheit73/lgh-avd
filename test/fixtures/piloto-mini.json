@@ -4,5 +4,6 @@
   "RECEPCIONISTA UM TESTE": { "nome": "Recepcionista Um Teste", "setor": "Recepção", "equipe": "Recepção", "lider": false, "avaliadores": ["GERENTE GERAL TESTE"], "funcao": "Recepcionista", "situacao": "Ativo" },
   "ANA TESTE DUPLA FILIAL": { "nome": "Ana Teste Dupla Filial", "setor": "Administrativo", "equipe": "Administrativo", "lider": false, "avaliadores": ["CEO DA REDE TESTE"], "funcao": "Assistente Administrativo", "situacao": "Ativo" },
   "CAMAREIRA BRANO TESTE": { "nome": "Camareira Brano Teste", "setor": "Governança", "equipe": "Governança", "lider": false, "avaliadores": ["SUPERVISOR BRANO TESTE"], "funcao": "Camareira", "situacao": "Ativo" },
-  "SUPERVISOR BRANO TESTE": { "nome": "Supervisor Brano Teste", "setor": "Governança", "equipe": "Governança", "lider": true, "avaliadores": [], "funcao": "Supervisor de Governança", "situacao": "Ativo" }
+  "SUPERVISOR BRANO TESTE": { "nome": "Supervisor Brano Teste", "setor": "Governança", "equipe": "Governança", "lider": true, "avaliadores": [], "funcao": "Supervisor de Governança", "situacao": "Ativo" },
+  "RECEPCIONISTA BRANO TESTE": { "nome": "Recepcionista Brano Teste", "setor": "Recepção", "equipe": "Recepção", "lider": false, "avaliadores": ["GERENTE GERAL TESTE"], "funcao": "Recepcionista", "situacao": "Ativo" }
 }

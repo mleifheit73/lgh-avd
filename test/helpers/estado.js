@@ -7,9 +7,9 @@ import { criarAtuacao } from '../../app/js/modelo/atuacao.js';
  * (por exemplo a estrutura corporativa, que a carga nunca infere).
  * Extra sem id recebe o id estável `${organizacaoId}|${pessoaRef}|${n}`.
  */
-export function montarEstado(base, piloto = {}, extras = [], fusoes) {
+export function montarEstado(base, piloto = {}, extras = [], fusoes, organizacaoPiloto = 'GOLDEN') {
   const organizacoes = organizacoesDe(base, fusoes);
-  const { atuacoes, semOrganizacao, log } = atuacoesIniciais(base, organizacoes, piloto);
+  const { atuacoes, semOrganizacao, log } = atuacoesIniciais(base, organizacoes, piloto, { organizacaoPiloto });
   for (const e of extras) {
     const n = atuacoes.filter(a => a.organizacaoId === e.organizacaoId && a.pessoaRef === e.pessoaRef).length + 1;
     const id = e.id ?? idAtuacao(e.organizacaoId, e.pessoaRef, n);

@@ -11,7 +11,7 @@ const FUSAO_MINI = [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOL
 const temDadosReais = fs.existsSync('out/base.json') && fs.existsSync('app/data/base.json') && fs.existsSync('app/data/piloto-golden.json');
 const base = () => lerFixture('base-mini.json');
 const pilotoMini = () => lerFixture('piloto-mini.json');
-const iniciais = (piloto = {}, fusoes = FUSAO_MINI) => atuacoesIniciais(base(), organizacoesDe(base(), fusoes), piloto);
+const iniciais = (piloto = {}, fusoes = FUSAO_MINI) => atuacoesIniciais(base(), organizacoesDe(base(), fusoes), piloto, { organizacaoPiloto: 'GOLDEN' });
 
 test('atuacoesIniciais: CLT na organização da filial, sem superior, origem carga', () => {
   const { atuacoes } = iniciais();
@@ -52,18 +52,32 @@ test('atuacoesIniciais: piloto dá setor, podeLiderar e superior inferido_por_ca
   const sup = atuacoes.find(a => a.pessoaRef === 'SUP');
   assert.equal(sup.podeLiderar, true); assert.equal(sup.superiorId, null); assert.equal(sup.setor, 'Governança');
   assert.equal(atuacoes.find(a => a.pessoaRef === 'REC1').superiorId, 'GOLDEN|GG|1');
-  assert.equal(atuacoes.find(a => a.pessoaRef === 'BR2').superiorId, 'BRANO|BR3|1');
+  // R10: BR1, BR2 e BR3 estão no piloto e foram realocados do BRANO para o Golden
+  assert.equal(atuacoes.find(a => a.pessoaRef === 'BR2').superiorId, 'GOLDEN|BR3|1');
   assert.ok(!log.some(l => l.codigo === 'avaliador_nao_encontrado'));
 });
-test('atuacoesIniciais: avaliador de outra organização é logado e o superior fica null', () => {
+test('atuacoesIniciais: avaliador sem atuação na organização do piloto é logado e o superior fica null', () => {
   const { atuacoes, log } = iniciais(pilotoMini());
-  for (const org of ['GOLDEN', 'BRANO']) {
-    const ana = atuacoes.find(a => a.pessoaRef === 'ANA' && a.organizacaoId === org);
-    assert.equal(ana.superiorId, null, org);
-  }
+  const ana = atuacoesDe(atuacoes, 'ANA');
+  assert.equal(ana.length, 1, 'Ana está no piloto: uma atuação só, no Golden');
+  assert.equal(ana[0].organizacaoId, 'GOLDEN'); assert.equal(ana[0].superiorId, null);
   const l = log.filter(x => x.codigo === 'avaliador_fora_da_organizacao');
-  assert.equal(l.length, 2);
-  assert.ok(l.every(x => x.avaliador === 'CEO DA REDE TESTE'));
+  assert.equal(l.length, 1);
+  assert.equal(l[0].avaliador, 'CEO DA REDE TESTE');
+});
+test('atuacoesIniciais: pessoa do piloto com vínculo em outra filial é realocada para a organização do piloto (R10)', () => {
+  const { atuacoes, log } = iniciais(pilotoMini());
+  const br1 = atuacoesDe(atuacoes, 'BR1');
+  assert.equal(br1.length, 1);
+  assert.equal(br1[0].organizacaoId, 'GOLDEN'); assert.equal(br1[0].metodoInferencia, 'piloto');
+  assert.equal(br1[0].origem, 'inferido_por_cargo'); assert.equal(br1[0].superiorId, 'GOLDEN|GG|1'); assert.equal(br1[0].setor, 'Recepção');
+  assert.deepEqual(log.find(l => l.codigo === 'realocado_pelo_piloto' && l.pessoaId === 'BR1'), { codigo: 'realocado_pelo_piloto', mensagem: log.find(l => l.codigo === 'realocado_pelo_piloto' && l.pessoaId === 'BR1').mensagem, pessoaId: 'BR1', de: 'BRANO', para: 'GOLDEN' });
+  assert.ok(!atuacoes.some(a => a.pessoaRef === 'BR1' && a.organizacaoId === 'BRANO'));
+});
+test('atuacoesIniciais: sem a organização do piloto em organizacoes, nada é realocado', () => {
+  const { atuacoes, log } = atuacoesIniciais(base(), organizacoesDe(base(), FUSAO_MINI), pilotoMini(), { organizacaoPiloto: 'NAO EXISTE' });
+  assert.equal(atuacoes.find(a => a.pessoaRef === 'BR1').organizacaoId, 'BRANO');
+  assert.ok(!log.some(l => l.codigo === 'realocado_pelo_piloto'));
 });
 test('atuacoesIniciais: avaliador inexistente na base é logado como nao_encontrado', () => {
   const p = { 'CAMAREIRA TESTE': { nome: 'x', setor: 'S', equipe: 'S', lider: false, avaliadores: ['FULANO QUE NAO EXISTE'], funcao: 'x', situacao: 'Ativo' } };
@@ -141,6 +155,8 @@ test('base real: PJ inferidos, pool sem organização, raiz do Golden', { skip: 
   assert.ok(inferidas.length >= 100);
   assert.ok(semOrganizacao.length >= 100 && semOrganizacao.length <= 140);
   assert.equal(raizesGolden.length, 1);
+  assert.equal(porCodigo.avaliador_fora_da_organizacao ?? 0, 0, 'todo avaliador do piloto tem atuação no Golden');
+  assert.ok((porCodigo.realocado_pelo_piloto ?? 0) >= 1);
   if (golden.filter(a => ['GERENTE GERAL', 'GERENTE GERAL SENIOR'].includes(a.funcao.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase())).length > 1) {
     assert.ok(log.some(l => l.codigo === 'multiplas_raizes_candidatas' && l.organizacaoId === 'HOTEL LAGHETTO GOLDEN'));
   }

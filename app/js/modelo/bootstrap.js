@@ -24,13 +24,27 @@ function montar(dados, extra) {
  * piloto: { [nomeNormalizado]: { nome, setor, equipe, lider, avaliadores: string[], funcao, situacao } } (app/data/piloto-golden.json).
  * Devolve { atuacoes, semOrganizacao, log }. O log tem `codigo` fixo para a tela listar sem reinterpretar.
  */
-export function atuacoesIniciais(base, organizacoes, piloto = {}, equivalencias = EQUIVALENCIAS) {
+export const ORGANIZACAO_PILOTO = 'HOTEL LAGHETTO GOLDEN';
+
+export function atuacoesIniciais(base, organizacoes, piloto = {}, { equivalencias = EQUIVALENCIAS, organizacaoPiloto = ORGANIZACAO_PILOTO } = {}) {
   const log = [];
   const aviso = (codigo, mensagem, detalhe = {}) => log.push({ codigo, mensagem, ...detalhe });
   const pessoas = new Map(base.pessoas.map(p => [p.id, p]));
 
   const orgDaFilial = new Map();
   for (const o of organizacoes) for (const f of o.filiais ?? []) orgDaFilial.set(chaveEmpresa(f), o.id);
+
+  const pilotoDe = pessoa => {
+    if (!pessoa) return null;
+    for (const nome of [pessoa.nome, ...(pessoa.nomesAlternativos ?? [])]) {
+      const p = piloto[normalizarNome(nome)];
+      if (p) return p;
+    }
+    return null;
+  };
+
+  const pilotoAtivo = organizacoes.some(o => o.id === organizacaoPiloto);
+  const prioridade = o => (o === 'carga' ? 0 : o === 'inferido_por_empresa' ? 1 : 2);
 
   // 1. Um candidato por (pessoa, organização). CLT vence PJ (spec 3.4: vínculo não cria atuação).
   const candidatos = new Map();   // `${org}|${pessoa}` -> candidato
@@ -51,21 +65,17 @@ export function atuacoesIniciais(base, organizacoes, piloto = {}, equivalencias 
       }
       orgId = r.organizacaoId; origem = 'inferido_por_empresa'; metodo = r.metodo;
     }
+    // R10: quem está no piloto validado pelo RH tem a atuação na organização do piloto, não na filial de folha (spec 3.4).
+    if (pilotoAtivo && orgId !== organizacaoPiloto && pilotoDe(pessoas.get(v.pessoaId))) {
+      aviso('realocado_pelo_piloto', `${v.pessoaId} está no piloto: atuação movida de ${orgId} para ${organizacaoPiloto}`, { pessoaId: v.pessoaId, de: orgId, para: organizacaoPiloto });
+      orgId = organizacaoPiloto; origem = 'inferido_por_cargo'; metodo = 'piloto';
+    }
     const chave = `${orgId}|${v.pessoaId}`;
     const atual = candidatos.get(chave);
-    if (atual && !(atual.origem !== 'carga' && origem === 'carga')) continue;   // mantém o primeiro, salvo CLT chegando depois de PJ
+    if (atual && prioridade(atual.origem) <= prioridade(origem)) continue;   // mantém o de maior confiança: carga, depois empresa, depois piloto
     if (!atual) ordem.push(chave);
     candidatos.set(chave, { pessoaId: v.pessoaId, orgId, origem, metodo, vinculo: v });
   }
-
-  const pilotoDe = pessoa => {
-    if (!pessoa) return null;
-    for (const nome of [pessoa.nome, ...(pessoa.nomesAlternativos ?? [])]) {
-      const p = piloto[normalizarNome(nome)];
-      if (p) return p;
-    }
-    return null;
-  };
 
   // 2. Atuação n=1 de cada candidato, com setor, equipe e podeLiderar do piloto quando a pessoa está nele.
   const atuacoes = [];
