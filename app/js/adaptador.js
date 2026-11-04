@@ -542,6 +542,32 @@ export function criarAtuacaoNaOrganizacao(S, { pessoaId, organizacaoId, superior
   });
 }
 
+/**
+ * Primeira atuação de uma organização que ainda não tem raiz (Tarefa 9): é como o RH da holding começa a estrutura
+ * corporativa, que nasce vazia (D20). Nasce raiz, sem superior, com marca de líder (R23), origem 'definido'.
+ * Recusa: organização ou pessoa inexistente, organização que já tem raiz (raiz_ja_definida: use marcarRaiz),
+ * pessoa que já tem atuação corrente lá (pessoa_ja_na_organizacao), função vazia (sem_funcao: nada é inventado).
+ */
+export function criarRaizNaOrganizacao(S, { pessoaId, organizacaoId, funcao, autor, quando = hoje() } = {}) {
+  return transacao(S, organizacaoId, () => {
+    if (!organizacao(S, organizacaoId)) throw new ErroAdaptador('organizacao_inexistente', `Organização ${organizacaoId} não existe`, { organizacaoId });
+    if (!pessoaPorId(S, pessoaId)) throw new ErroAdaptador('pessoa_inexistente', `Pessoa ${pessoaId} não existe na base`, { pessoaId });
+    const raiz = correntesDaOrg(S, organizacaoId).find(a => a.ehRaiz);
+    if (raiz) throw new ErroAdaptador('raiz_ja_definida', `${organizacaoId} já tem raiz (${raiz.id})`, { organizacaoId, raizId: raiz.id });
+    if (correntesDaPessoa(S, pessoaId, organizacaoId).length) throw new ErroAdaptador('pessoa_ja_na_organizacao', `${pessoaId} já tem atuação em ${organizacaoId}`, { pessoaId, organizacaoId });
+    if (funcao == null || funcao === '') throw new ErroAdaptador('sem_funcao', `A atuação nova de ${pessoaId} precisa de função`, { pessoaId });
+    const nova = {
+      id: proximoId(S, organizacaoId, pessoaId), pessoaRef: pessoaId, organizacaoId, funcao,
+      superiorId: null, ehRaiz: true, setor: null, turno: null, equipe: null,
+      inicio: quando, fim: null, situacao: 'ativa', origem: 'definido', metodoInferencia: null, confirmadaPor: autor ?? null,
+      definidaEm: quando, podeLiderar: true,
+    };
+    S.atuacoes.push(nova);
+    validarArvore(S.atuacoes, organizacaoId);
+    return { acao: 'criada', atuacao: nova };
+  });
+}
+
 /** Marca de líder da atuação (D17). */
 export function marcarLider(S, atuacaoId, valor) {
   const a = exigir(S, atuacaoId, 'Atuação');

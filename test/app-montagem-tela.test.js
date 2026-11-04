@@ -223,3 +223,30 @@ test('Rede: pessoa sem cargo na carga pede a função antes de adicionar, e a fu
   assert.ok(nova); assert.equal(nova.funcao, 'Diretor regional');
   assert.ok(!S.atuacoes.some(a => a.funcao === 'Sem função'));
 });
+
+test('Rede vazia (Tarefa 9): o admin escolhe a raiz corporativa no painel; a raiz aparece na árvore; desfazer esvazia; RH da unidade não vê a escolha', async () => {
+  const { window, document, S, erros } = await abrir([], ADMIN);
+  escolher(window, document, '#ar-org', CORP);
+  assert.ok(!S.atuacoes.some(a => a.organizacaoId === CORP), 'premissa: a Rede nasce vazia');
+  assert.match(painel(document).textContent, /ainda não tem raiz/);
+  const radios = [...document.querySelectorAll('#ar-pool input[type=radio][data-pool]')];
+  assert.ok(radios.length > 0, 'pool com escolha única');
+  assert.ok(radios.every(r => !r.dataset.pool.startsWith('a:')), 'só pessoa sem organização ou raiz de unidade');
+  const btn = document.querySelector('#ar-definir-raiz');
+  assert.equal(btn.disabled, true);
+  const ceo = radios.find(r => r.dataset.pool === 'p:CEO-REDE'); assert.ok(ceo, 'o CEO sem organização está na lista');
+  ceo.click();
+  assert.equal(document.querySelector('#ar-definir-raiz').disabled, false);
+  document.querySelector('#ar-definir-raiz').click();
+  const raiz = S.atuacoes.find(a => a.pessoaRef === 'CEO-REDE' && a.organizacaoId === CORP && a.situacao === 'ativa');
+  assert.ok(raiz && raiz.ehRaiz && raiz.superiorId == null && raiz.podeLiderar, JSON.stringify(raiz));
+  assert.ok(caixa(document, raiz.id), 'a raiz está desenhada na árvore da Rede');
+  assert.match(painel(document).textContent, /Equipe de/, 'a raiz nova fica selecionada, pronta para montar a equipe');
+  window.desfazer();
+  assert.ok(!S.atuacoes.some(a => a.organizacaoId === CORP), 'desfazer apaga a raiz');
+  assert.deepEqual(erros.map(String), []);
+
+  const u = await abrir([], RH);
+  escolher(u.window, u.document, '#ar-org', CORP);
+  assert.equal(u.document.querySelectorAll('#ar-pool input[type=radio]').length, 0, 'RH da unidade não escolhe a raiz corporativa');
+});

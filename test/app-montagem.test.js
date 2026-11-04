@@ -200,3 +200,47 @@ test('adicionarNaRede não inventa função: sem cargo na carga recusa sem_funca
   assert.equal(ok.ok, true);
   assert.equal(T.atuacoes.find(a => a.pessoaRef === 'DR' && a.organizacaoId === CORP).funcao, 'Diretor regional');
 });
+
+/* ================= raiz da estrutura corporativa (Tarefa 9: a Rede nasce vazia e precisa de uma primeira atuação) ================= */
+
+test('definirRaizDaRede: com a Rede vazia, uma pessoa do pool vira a raiz corporativa (sem superior, líder, definida pelo RH)', async () => {
+  const { definirRaizDaRede } = await import('../app/js/modelo/montagem.js');
+  const S = estado([]);
+  assert.ok(!S.atuacoes.some(a => a.organizacaoId === CORP), 'premissa: a Rede nasce vazia');
+  const p = poolRede(S).find(i => i.chave === 'p:CEO-REDE');
+  assert.ok(p, 'o CEO sem organização está no pool');
+  const semOrg = S.semOrganizacao.length;
+  const r = definirRaizDaRede(S, 'p:CEO-REDE', 'RH TESTE', '2026-11-04');
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const raiz = S.atuacoes.find(a => a.pessoaRef === 'CEO-REDE' && a.organizacaoId === CORP);
+  assert.ok(raiz); assert.equal(raiz.ehRaiz, true); assert.equal(raiz.superiorId, null); assert.equal(raiz.podeLiderar, true);
+  assert.equal(raiz.origem, 'definido'); assert.equal(raiz.confirmadaPor, 'RH TESTE'); assert.equal(raiz.inicio, '2026-11-04');
+  assert.equal(raiz.funcao, p.funcao, 'função é o cargo da carga, nada inventado');
+  assert.doesNotThrow(() => validarArvore(S.atuacoes, CORP));
+  assert.equal(S.semOrganizacao.length, semOrg, 'S.semOrganizacao não é editada');
+  assert.ok(!poolRede(S).some(i => i.pessoaId === 'CEO-REDE'), 'a raiz sai do pool');
+  /* segunda raiz é recusada: a Rede já tem raiz */
+  assert.equal(definirRaizDaRede(S, 'p:DR', 'RH', '2026-11-04').codigo, 'raiz_ja_definida');
+});
+
+test('definirRaizDaRede: gerente geral de unidade pode ser a raiz; sem cargo na carga pede função; chave fora do pool é recusada', async () => {
+  const { definirRaizDaRede } = await import('../app/js/modelo/montagem.js');
+  const S = estado([]);
+  const gg = idDe(S, 'GG');
+  const antes = copia(S);
+  assert.equal(definirRaizDaRede(S, 'x:nada', 'RH').codigo, 'fora_do_pool');
+  assert.deepEqual(S.atuacoes, antes, 'recusa não altera nada');
+  const r = definirRaizDaRede(S, `r:${gg}`, 'RH', '2026-11-04');
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const raiz = S.atuacoes.find(a => a.pessoaRef === 'GG' && a.organizacaoId === CORP);
+  assert.ok(raiz && raiz.ehRaiz && raiz.superiorId == null);
+  assert.equal(por(S, gg).ehRaiz, true, 'a atuação na unidade continua raiz da unidade');
+  /* pessoa sem cargo na carga: só com função informada */
+  const T = estado([]);
+  const semCargo = poolRede(T).find(i => i.tipo === 'pessoa' && !i.funcao);
+  if (semCargo) {
+    assert.equal(definirRaizDaRede(T, semCargo.chave, 'RH', '2026-11-04').codigo, 'sem_funcao');
+    assert.equal(definirRaizDaRede(T, semCargo.chave, 'RH', '2026-11-04', { funcao: 'Diretor Geral' }).ok, true);
+    assert.equal(T.atuacoes.find(a => a.pessoaRef === semCargo.pessoaId && a.organizacaoId === CORP).funcao, 'Diretor Geral');
+  }
+});

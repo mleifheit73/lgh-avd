@@ -12,7 +12,7 @@ import { filaDePendencias, TRAVAM_CICLO } from './pendencias.js';
 import {
   ehCorrente, nomeExibicao, vinculoDaAtuacao, SEM_SETOR, definirSuperior, removerSuperior,
   marcarLider as marcarLiderAdaptador, confirmarInferido as confirmarInferidoAdaptador,
-  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao,
+  marcarRaiz as marcarRaizAdaptador, criarAtuacaoNaOrganizacao, criarRaizNaOrganizacao,
 } from '../adaptador.js';
 
 const hoje = () => new Date().toISOString().slice(0, 10);
@@ -190,6 +190,20 @@ export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = ho
   }
   const ok = aplicados.length > 0 || recusados.length === 0;
   return ok ? { ok, aplicados, recusados } : { ok, codigo: recusados[0].codigo, aplicados, recusados };
+}
+
+/**
+ * Primeira atuação da estrutura corporativa (Tarefa 9): a Rede nasce vazia (D20) e adicionarNaRede exige um superior,
+ * então o RH da holding escolhe um item do pool ('pessoa' sem organização ou 'raiz' de unidade) e ele vira a raiz
+ * corporativa: sem superior, marca de líder, origem 'definido'. Item 'atuacao' já está no corporativo: use marcarRaiz.
+ * Função: o cargo da carga; sem cargo, só com opcoes.funcao (nada é inventado). Devolve { ok, codigo?, atuacao? }.
+ */
+export function definirRaizDaRede(S, chave, autor, quando = hoje(), opcoes = {}) {
+  const item = poolRede(S).find(i => i.chave === chave);
+  if (!item) return { ok: false, codigo: 'fora_do_pool' };
+  if (item.tipo === 'atuacao') return { ok: false, codigo: 'ja_no_corporativo' };
+  const funcao = item.funcao || String(opcoes.funcao ?? '').trim() || null;
+  return criarRaizNaOrganizacao(S, { pessoaId: item.pessoaId, organizacaoId: ID_CORPORATIVO, funcao, autor, quando });
 }
 
 /* ---------- trava de abertura de ciclo (Tarefa 7, spec 7.4) ---------- */
