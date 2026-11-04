@@ -247,11 +247,17 @@ test('corrida banco x boot: líder salvo no banco é aplicado após o boot e nad
   const lideresBase = [...semBanco.window.eval('PESSOAS').filter((p) => p.lider).map((p) => p.id)];
   assert.deepEqual([...visao.filter((p) => p.lider).map((p) => p.id)].sort(), [...new Set([...lideresBase, 'CAM'])].sort(), 'líderes da base mais o CAM do delta');
   assert.equal(window.eval('USUARIOS').some((u) => u.nome === 'USUARIO SINTETICO'), true);
+  /* I4: o teste precisa ver uma gravação de verdade. Marcar outro líder depois do boot provoca a escrita de config/lideres-e-contas;
+     nenhuma escrita pode ter acontecido antes de S.pronto, e a lista gravada precisa ter o CAM do delta. */
+  const antesDaMarca = stub.sets.filter((s) => s.caminho === 'config/lideres-e-contas').length;
+  assert.equal(window.eval("LGH_LID.definirLider(PESSOAS.find((p) => p.id === 'GAR1'), true).ok"), true);
+  await tick();
   const gravacoes = stub.sets.filter((s) => s.caminho === 'config/lideres-e-contas');
-  for (const g of gravacoes) {
-    assert.equal(g.bootPronto, true, 'gravou antes do boot');
-    assert.ok(g.d.lideres.includes('CAM'), 'gravou lista de líderes sem o CAM');
-  }
+  assert.ok(gravacoes.length > antesDaMarca, 'marcar líder depois do boot grava config/lideres-e-contas');
+  assert.ok(stub.sets.length > 0);
+  for (const g of stub.sets) assert.equal(g.bootPronto, true, `gravou ${g.caminho} antes do boot`);
+  for (const g of gravacoes) assert.ok(g.d.lideres.includes('CAM'), 'gravou lista de líderes sem o CAM');
+  assert.ok(gravacoes[gravacoes.length - 1].d.lideres.includes('GAR1'), 'a última gravação tem o líder novo');
 });
 
 test('boot que falha depois de S.pessoas atribuído faz carregarPagina rejeitar', async () => {
