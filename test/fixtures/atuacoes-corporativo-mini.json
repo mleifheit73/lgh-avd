@@ -1,0 +1,5 @@
+[
+  { "id": "LAGHETTO CORPORATIVO|CEO-REDE|1", "pessoaRef": "CEO-REDE", "organizacaoId": "LAGHETTO CORPORATIVO", "funcao": "CEO DA REDE", "superiorId": null, "ehRaiz": true, "setor": null, "turno": null, "equipe": null, "inicio": "2026-01-10", "fim": null, "situacao": "ativa", "origem": "definido", "metodoInferencia": null, "confirmadaPor": "RH TESTE", "podeLiderar": true },
+  { "id": "LAGHETTO CORPORATIVO|DR|1", "pessoaRef": "DR", "organizacaoId": "LAGHETTO CORPORATIVO", "funcao": "DIRETOR REGIONAL", "superiorId": "LAGHETTO CORPORATIVO|CEO-REDE|1", "ehRaiz": false, "setor": null, "turno": null, "equipe": null, "inicio": "2026-01-10", "fim": null, "situacao": "ativa", "origem": "definido", "metodoInferencia": null, "confirmadaPor": "RH TESTE", "podeLiderar": true },
+  { "id": "LAGHETTO CORPORATIVO|GG|1", "pessoaRef": "GG", "organizacaoId": "LAGHETTO CORPORATIVO", "funcao": "GERENTE GERAL", "superiorId": "LAGHETTO CORPORATIVO|DR|1", "ehRaiz": false, "setor": null, "turno": null, "equipe": null, "inicio": "2026-01-10", "fim": null, "situacao": "ativa", "origem": "definido", "metodoInferencia": null, "confirmadaPor": "RH TESTE", "podeLiderar": false }
+]
