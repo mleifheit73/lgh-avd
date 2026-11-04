@@ -162,8 +162,7 @@ test('tela: botão Abrir ciclo fica desabilitado e mostra o motivo, nomeando a o
   assert.ok(msg.classList.contains('tr-motivo'));
   assert.equal(b.getAttribute('aria-describedby'), msg.id);
   const org = S.organizacoes.find(o => o.id === 'GOLDEN');
-  assert.match(msg.textContent, /Não dá para abrir o ciclo: 5 pessoas sem líder definido em /);
-  assert.ok(msg.textContent.includes(org.nome));
+  assert.equal(msg.textContent.replace('Ver pendências', '').trim(), `Não dá para abrir um novo ciclo para ${org.nome}: 5 pessoas sem líder definido.`);
   assert.equal(msg.dataset.codigo, 'sem_superior');
   b.click();
   assert.equal(window.eval('CICLOS[2].status'), 'Planejado', 'clicar não abre');
@@ -204,7 +203,7 @@ test('tela: trocar a organização do topo recalcula a trava (BRANO sem raiz)', 
   const { window, document } = await abrir();
   window.trocarOrganizacao('BRANO');
   window.irPara('ciclos');
-  assert.match(botaoAbrir(document).nextElementSibling.textContent, /organização sem raiz definida em /);
+  assert.match(botaoAbrir(document).nextElementSibling.textContent, /^Não dá para abrir um novo ciclo para BRANO: organização sem raiz definida\./);
 });
 
 test('tela: quem não edita o calendário não vê botão de abrir (nada para travar)', async () => {

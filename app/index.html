@@ -4041,7 +4041,8 @@ Regras:
       const msg = document.createElement('span');
       msg.className = 'tr-motivo'; msg.id = 'tr-motivo-' + k; msg.setAttribute('role', 'status');
       msg.dataset.codigo = r.codigo || '';
-      msg.innerHTML = `<span>Não dá para abrir o ciclo: <b>${esc(r.motivo)}</b> em ${esc(org ? nomeOrg(org) : 'nenhuma organização')}.</span>`
+      /* M8: o calendário é global (R24) e outro ciclo pode já estar aberto: o texto fala de um novo ciclo para esta organização */
+      msg.innerHTML = `<span>Não dá para abrir um novo ciclo para ${esc(org ? nomeOrg(org) : 'nenhuma organização')}: <b>${esc(r.motivo)}</b>.</span>`
         + (verPend ? `<button type="button" class="linkish" data-ver-pendencias>Ver pendências</button>` : '');
       b.setAttribute('aria-describedby', msg.id);
       b.insertAdjacentElement('afterend', msg);
