@@ -2,9 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { baseParaPublico, mascarar, faixaEtaria, hashCpf, extrairPilotoGolden, normalizarNome, temSequenciaCpf, SAL } from '../scripts/build-app.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { baseParaPublico, mascarar, faixaEtaria, idPublico, lerOuCriarSegredo, extrairPilotoGolden, normalizarNome, temSequenciaCpf } from '../scripts/build-app.mjs';
 
 const REF = new Date('2026-11-03T12:00:00Z');
+const SEGREDO = '0f'.repeat(32);
+const publico = (b, ref = REF, commit) => baseParaPublico(b, ref, commit, SEGREDO);
 
 const baseSintetica = () => ({
   geradoEm: '2026-11-03T00:00:00.000Z',
@@ -25,33 +30,36 @@ const baseSintetica = () => ({
   equivalenciaEmpresas: { E1: ['E1 LTDA'] },
 });
 
-test('baseParaPublico: sem 11 dígitos soltos, ids e hash corretos, sem-cpf-N em ordem', () => {
-  const pub = baseParaPublico(baseSintetica(), REF, 'abc123');
+test('baseParaPublico: sem 11 dígitos soltos, sem hash, ids HMAC corretos, sem-cpf-N em ordem', () => {
+  const pub = publico(baseSintetica(), REF, 'abc123');
   const txt = JSON.stringify(pub);
   assert.equal(temSequenciaCpf(txt), false);
   assert.equal(/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(txt), false);
   assert.equal(txt.includes('"cpf"'), false);
   assert.equal(txt.includes('nascimento'), false);
   assert.equal(txt.includes('idade'), false);
+  assert.equal(txt.includes('cpfHash'), false);
+  assert.equal(/[0-9a-fA-F]{64}/.test(txt), false);
   const [p1, p2, p3, p4] = pub.pessoas;
-  assert.equal(p1.cpfHash, hashCpf('00000000001'));
-  assert.equal(p1.id, p1.cpfHash.slice(0, 12));
+  assert.ok(pub.pessoas.every(p => !('cpfHash' in p)));
+  assert.equal(p1.id, idPublico(SEGREDO, '00000000001'));
+  assert.equal(p1.id, crypto.createHmac('sha256', Buffer.from(SEGREDO, 'hex')).update('00000000001').digest('hex').slice(0, 12));
+  assert.notEqual(p1.id, crypto.createHash('sha256').update('lgh-avd-2026::00000000001').digest('hex').slice(0, 12), 'não é mais o SHA-256 com sal público');
   assert.equal(p2.id, 'sem-cpf-1');
   assert.equal(p4.id, 'sem-cpf-2');
-  assert.equal(p2.cpfHash, null);
-  assert.equal(p3.id, hashCpf('00000000002').slice(0, 12));
+  assert.equal(p3.id, idPublico(SEGREDO, '00000000002'));
   assert.equal(pub.commit, 'abc123');
 });
 
 test('baseParaPublico: faixa etária calculada na data de referência, null sem nascimento', () => {
-  const pub = baseParaPublico(baseSintetica(), REF);
+  const pub = publico(baseSintetica(), REF);
   assert.equal(pub.pessoas[0].faixaEtaria, '35 a 44');
   assert.equal(pub.pessoas[1].faixaEtaria, null);
   assert.equal(pub.pessoas[2].faixaEtaria, '25 a 34');
 });
 
 test('baseParaPublico: pessoaRef vira pessoaId e o resto vem de lista explícita de campos', () => {
-  const pub = baseParaPublico(baseSintetica(), REF);
+  const pub = publico(baseSintetica(), REF);
   const [v1, v2] = pub.vinculos;
   assert.equal(v1.pessoaId, pub.pessoas[0].id);
   assert.equal(v2.pessoaId, 'sem-cpf-1');
@@ -63,7 +71,7 @@ test('baseParaPublico: pessoaRef vira pessoaId e o resto vem de lista explícita
 });
 
 test('baseParaPublico: CPF no detalhe vira [pessoa <id>] quando conhecido e [CPF omitido] quando não', () => {
-  const pub = baseParaPublico(baseSintetica(), REF);
+  const pub = publico(baseSintetica(), REF);
   const d = pub.pendencias[1].detalhe;
   assert.ok(d.includes(`[pessoa ${pub.pessoas[0].id}]`), d);
   assert.ok(d.includes(`[pessoa ${pub.pessoas[2].id}]`), d);
@@ -72,9 +80,9 @@ test('baseParaPublico: CPF no detalhe vira [pessoa <id>] quando conhecido e [CPF
 
 test('baseParaPublico: vínculo ou pendência de pessoa inexistente lança erro', () => {
   const b1 = baseSintetica(); b1.vinculos.push({ pessoaRef: '11111111111', regime: 'CLT' });
-  assert.throws(() => baseParaPublico(b1, REF), /pessoaRef sem pessoa/);
+  assert.throws(() => publico(b1, REF), /pessoaRef sem pessoa/);
   const b2 = baseSintetica(); b2.pendencias.push({ pessoaRef: 'sem-cpf-99', codigo: 'x', detalhe: '' });
-  assert.throws(() => baseParaPublico(b2, REF), /pessoaRef sem pessoa/);
+  assert.throws(() => publico(b2, REF), /pessoaRef sem pessoa/);
 });
 
 test('mascarar: formatado, só dígitos, desconhecido, e não mexe em não-texto', () => {
@@ -100,12 +108,28 @@ test('faixaEtaria: limites 24/25, 34/35, 44/45, 54/55 e nulo', () => {
   for (const ruim of [null, undefined, '', 'lixo', '2030-01-01', '1800-01-01']) assert.equal(faixaEtaria(ruim, REF), null, String(ruim));
 });
 
-test('hashCpf: SHA-256 com o sal do projeto, 64 hex', () => {
-  assert.equal(SAL, 'lgh-avd-2026::');
-  const h = hashCpf('00000000001');
-  assert.match(h, /^[0-9a-f]{64}$/);
-  assert.equal(h, crypto.createHash('sha256').update('lgh-avd-2026::00000000001').digest('hex'));
-  assert.notEqual(h, hashCpf('00000000002'));
+test('idPublico: HMAC-SHA256 com o segredo, 12 hex; outro segredo dá outro id; segredo inválido lança', () => {
+  const id = idPublico(SEGREDO, '00000000001');
+  assert.match(id, /^[0-9a-f]{12}$/);
+  assert.notEqual(id, idPublico(SEGREDO, '00000000002'));
+  assert.notEqual(id, idPublico('1e'.repeat(32), '00000000001'));
+  for (const ruim of [undefined, '', 'xyz', 'ab'.repeat(16)]) assert.throws(() => idPublico(ruim, '00000000001'), /segredo dos ids inválido/);
+  assert.throws(() => baseParaPublico(baseSintetica(), REF, 'x'), /segredo dos ids inválido/, 'sem segredo o build não gera id');
+});
+
+test('lerOuCriarSegredo: cria com 64 hex e avisa; depois lê o mesmo; recusa conteúdo ruim', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lgh-segredo-'));
+  const avisos = []; const original = console.error; console.error = (m) => avisos.push(String(m));
+  try {
+    const f = path.join(tmp, 'data', 'segredo-ids.txt');
+    const a = lerOuCriarSegredo(f);
+    assert.equal(a.criado, true); assert.match(a.segredo, /^[0-9a-f]{64}$/);
+    assert.match(avisos.join('\n'), /Guarde este arquivo junto com data\//);
+    const b = lerOuCriarSegredo(f);
+    assert.deepEqual(b, { segredo: a.segredo, criado: false });
+    fs.writeFileSync(f, 'nao-e-hex');
+    assert.throws(() => lerOuCriarSegredo(f), /64 hexadecimais/);
+  } finally { console.error = original; fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 test('extrairPilotoGolden: chaves normalizadas, campos esperados, erro sem o array', () => {

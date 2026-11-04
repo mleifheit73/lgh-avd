@@ -4,6 +4,7 @@ out/
 
 # Dados pessoais reais: nunca versionar. Obter do Projeto no claude.ai (ver README).
 data/
+data/segredo-ids.txt
 
 # Artefato gerado (Plano B): base com nomes e cópias dos módulos
 app/data/

@@ -1,13 +1,22 @@
 /**
  * Build do artefato (Plano B).
- *  1. copia src/carga/*.js e src/modelo/atuacao.js para app/js/ (sem alteração) e gera app/js/lgh.bundle.js (build-bundle.mjs);
- *  2. gera app/data/base.json (base pública: sem CPF, sem nascimento, sem idade) a partir de out/base.json;
- *  3. extrai app/data/piloto-golden.json do array PESSOAS de prototipo/index.html;
- *  4. monta dist/ como cópia de app/;
- *  5. varre dist/ atrás de dado pessoal. Achou: apaga dist/ e sai com código 4.
+ *  1. copia src/carga/*.js e src/modelo/atuacao.js para <app>/js/ (sem alteração) e gera <app>/js/lgh.bundle.js (build-bundle.mjs);
+ *  2. gera <app>/data/base.json (base pública: sem CPF, sem hash de CPF, sem nascimento, sem idade) a partir de out/base.json;
+ *  3. extrai <app>/data/piloto-golden.json do array PESSOAS de prototipo/index.html;
+ *  4. monta <dist>/ como cópia de <app>/;
+ *  5. varre <dist>/ atrás de dado pessoal. Achou: apaga <dist>/ e sai com código 4.
+ *
+ * Id público da pessoa (C1, revisão final do Plano B): os 12 primeiros hexadecimais de HMAC-SHA256(segredo, dígitos do CPF).
+ * O segredo fica em data/segredo-ids.txt (hexadecimal, fora do git, junto dos outros arquivos de data/). Sem o arquivo, o build
+ * cria um segredo novo e avisa: perder o arquivo muda todos os ids, e a montagem salva no banco deixa de casar com a base.
+ * O hash de CPF NÃO vai para a base pública: com sal conhecido, o espaço de CPFs (cerca de 10^9) se percorre por força bruta.
+ * Pessoa sem CPF recebe sem-cpf-N.
+ *
+ * Diretórios (padrão entre parênteses), para os testes nunca tocarem app/ nem dist/ reais:
+ *   LGH_BUILD_APP (app/), LGH_BUILD_DIST (dist/), LGH_SEGREDO_IDS (data/segredo-ids.txt).
  *
  * Sem out/base.json (CI, sem dados reais) os passos 2 e 3 são pulados com aviso; os módulos e o dist/ são montados mesmo assim.
- * Códigos de saída: 0 ok; 4 dado pessoal encontrado em dist/.
+ * Códigos de saída: 0 ok; 4 dado pessoal encontrado em dist/; 5 segredo dos ids ilegível.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,10 +28,29 @@ import { gerarBundle } from './build-bundle.mjs';
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (...p) => path.join(raiz, ...p);
 
-export const SAL = 'lgh-avd-2026::';
+/** Id público: 12 primeiros hexadecimais de HMAC-SHA256(segredo, dígitos do CPF). segredo: hexadecimal de 64 caracteres. */
+export function idPublico(segredoHex, cpfDigitos) {
+  if (!/^[0-9a-fA-F]{64}$/.test(String(segredoHex || ''))) throw new Error('segredo dos ids inválido: esperava 64 hexadecimais');
+  return crypto.createHmac('sha256', Buffer.from(segredoHex, 'hex')).update(String(cpfDigitos)).digest('hex').slice(0, 12);
+}
 
-export function hashCpf(cpfDigitos) {
-  return crypto.createHash('sha256').update(SAL + cpfDigitos).digest('hex');
+/**
+ * Lê o segredo dos ids; sem o arquivo, cria um novo (crypto.randomBytes(32)) e avisa no stderr.
+ * Devolve { segredo, criado }. Lança se o arquivo existe e não tem 64 hexadecimais.
+ */
+export function lerOuCriarSegredo(caminho) {
+  if (fs.existsSync(caminho)) {
+    const segredo = fs.readFileSync(caminho, 'utf8').trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(segredo)) throw new Error(`${caminho} não contém 64 hexadecimais`);
+    return { segredo, criado: false };
+  }
+  const segredo = crypto.randomBytes(32).toString('hex');
+  fs.mkdirSync(path.dirname(caminho), { recursive: true });
+  fs.writeFileSync(caminho, segredo + '\n', { mode: 0o600 });
+  console.error(`AVISO: ${caminho} não existia e foi criado com um segredo novo para os ids públicos das pessoas.\n` +
+    '  Guarde este arquivo junto com data/ (fora do git, como os outros dados reais). Se ele se perder, todos os ids mudam\n' +
+    '  e a montagem salva no banco do artefato deixa de casar com a base.');
+  return { segredo, criado: true };
 }
 
 /** Faixa etária na data de referência. null quando não há nascimento válido. */
@@ -58,17 +86,22 @@ export function mascarar(s, idPorRef = new Map()) {
   });
 }
 
-/** Converte a base com CPF (out/base.json) na base pública. */
-export function baseParaPublico(b, referencia = new Date(), commit = 'desconhecido') {
+/** Converte a base com CPF (out/base.json) na base pública. segredo: hexadecimal de 64 caracteres (ver idPublico). */
+export function baseParaPublico(b, referencia = new Date(), commit = 'desconhecido', segredo) {
   const idPorRef = new Map();
   let semCpf = 0;
+  const vistos = new Set();
   const pessoas = b.pessoas.map((p) => {
     const digitos = p.cpf ? String(p.cpf).replace(/\D/g, '') : '';
-    let id; let cpfHash = null;
-    if (digitos) { cpfHash = hashCpf(digitos); id = cpfHash.slice(0, 12); idPorRef.set(p.cpf, id); idPorRef.set(digitos, id); }
+    let id;
+    if (digitos) {
+      id = idPublico(segredo, digitos);
+      if (vistos.has(id) && idPorRef.get(digitos) !== id) throw new Error('dois CPFs diferentes com o mesmo id público');
+      vistos.add(id); idPorRef.set(p.cpf, id); idPorRef.set(digitos, id);
+    }
     else { id = 'sem-cpf-' + (++semCpf); if (p.idProvisorio) idPorRef.set(p.idProvisorio, id); }
     return {
-      id, nome: p.nome, status: p.status, motivoStatus: p.motivoStatus ?? null, cpfHash,
+      id, nome: p.nome, status: p.status, motivoStatus: p.motivoStatus ?? null,
       faixaEtaria: faixaEtaria(p.nascimento, referencia), nomesAlternativos: p.nomesAlternativos || [],
     };
   });
@@ -105,8 +138,9 @@ export function extrairPilotoGolden(html) {
 }
 
 /** Há sequência de 11 dígitos? São retirados antes da busca os identificadores públicos legítimos, que contêm runs de dígitos por acaso:
- *  tokens de 64 hexadecimais (cpfHash), "id"/"pessoaId" de 12 hexadecimais e o marcador "[pessoa <id>]".
- *  Um CPF de 11 dígitos nunca casa com essas exceções. Dígitos colados a letras (ex.: "CPF12345678901x") continuam sendo pegos. */
+ *  tokens de 64 hexadecimais (a varredura acusa esses tokens à parte, ver varrerVazamento), "id"/"pessoaId" de 12 hexadecimais e
+ *  o marcador "[pessoa <id>]". Um CPF de 11 dígitos nunca casa com essas exceções. Dígitos colados a letras
+ *  (ex.: "CPF12345678901x") continuam sendo pegos. */
 export function temSequenciaCpf(texto) {
   const limpo = texto
     .replace(/[0-9a-fA-F]{64}/g, '')
@@ -115,7 +149,16 @@ export function temSequenciaCpf(texto) {
   return /\d{11}/.test(limpo);
 }
 
-/** Varre dist/ atrás de CPF (11 dígitos ou formatado) e da chave "nascimento". Devolve a lista de achados. */
+/** Linha da constante USUARIOS da v34 no index.html: a única que pode ter hash de CPF (login, fora do escopo do Plano B). */
+const RE_USUARIOS = /^const USUARIOS = \[.*\];\r?$/m;
+
+/** Token de 64 hexadecimais (formato de hash SHA-256) fora da exceção documentada: só a constante USUARIOS do index.html. */
+export function temHash64(texto, arquivo) {
+  const t = path.basename(arquivo || '') === 'index.html' ? texto.replace(RE_USUARIOS, '') : texto;
+  return /[0-9a-fA-F]{64}/.test(t);
+}
+
+/** Varre dist/ atrás de CPF (11 dígitos ou formatado), de hash de 64 hexadecimais e da chave "nascimento". Devolve a lista de achados. */
 export function varrerVazamento(dir) {
   const achados = [];
   const andar = (d) => {
@@ -128,6 +171,7 @@ export function varrerVazamento(dir) {
         if (c[0] !== '000.000.000-00') { achados.push([f, 'CPF formatado']); break; }
       }
       if (/"nascimento"/.test(t)) achados.push([f, 'chave "nascimento"']);
+      if (temHash64(t, f)) achados.push([f, 'token de 64 hexadecimais (hash)']);
     }
   };
   if (fs.existsSync(dir)) andar(dir);
@@ -143,40 +187,48 @@ function copiarArvore(origem, destino) {
 }
 
 function principal() {
-  // 1. módulos do Plano A, sem alteração, e o bundle do navegador
-  gerarBundle();
+  const dirApp = path.resolve(process.env.LGH_BUILD_APP || rel('app'));
+  const dirDist = path.resolve(process.env.LGH_BUILD_DIST || rel('dist'));
+  const caminhoSegredo = path.resolve(process.env.LGH_SEGREDO_IDS || rel('data/segredo-ids.txt'));
+  const mostrar = (f) => path.relative(raiz, f) || f;
 
-  fs.mkdirSync(rel('app/data'), { recursive: true });
+  // 1. módulos do Plano A, sem alteração, e o bundle do navegador
+  gerarBundle(dirApp);
+
+  fs.mkdirSync(path.join(dirApp, 'data'), { recursive: true });
 
   // 2. base pública
   if (fs.existsSync(rel('out/base.json'))) {
     let commit = 'desconhecido';
     try { commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: raiz, encoding: 'utf8' }).trim(); } catch { /* fora do git */ }
-    const publica = baseParaPublico(JSON.parse(fs.readFileSync(rel('out/base.json'), 'utf8')), new Date(), commit);
-    fs.writeFileSync(rel('app/data/base.json'), JSON.stringify(publica));
-    console.log(`app/data/base.json: ${publica.pessoas.length} pessoas, ${publica.vinculos.length} vínculos`);
+    let segredo;
+    try { ({ segredo } = lerOuCriarSegredo(caminhoSegredo)); }
+    catch (e) { console.error(`Build abortado: ${e.message}.`); process.exit(5); }
+    const publica = baseParaPublico(JSON.parse(fs.readFileSync(rel('out/base.json'), 'utf8')), new Date(), commit, segredo);
+    fs.writeFileSync(path.join(dirApp, 'data/base.json'), JSON.stringify(publica));
+    console.log(`${mostrar(path.join(dirApp, 'data/base.json'))}: ${publica.pessoas.length} pessoas, ${publica.vinculos.length} vínculos`);
   } else {
-    console.warn('Aviso: out/base.json ausente, app/data/base.json não foi gerado (rode node src/cli/carga.js).');
+    console.warn('Aviso: out/base.json ausente, data/base.json não foi gerado (rode node src/cli/carga.js).');
   }
 
   // 3. piloto Golden
   if (fs.existsSync(rel('prototipo/index.html'))) {
     const piloto = extrairPilotoGolden(fs.readFileSync(rel('prototipo/index.html'), 'utf8'));
-    fs.writeFileSync(rel('app/data/piloto-golden.json'), JSON.stringify(piloto));
-    console.log(`app/data/piloto-golden.json: ${Object.keys(piloto).length} pessoas`);
+    fs.writeFileSync(path.join(dirApp, 'data/piloto-golden.json'), JSON.stringify(piloto));
+    console.log(`${mostrar(path.join(dirApp, 'data/piloto-golden.json'))}: ${Object.keys(piloto).length} pessoas`);
   }
 
   // 4. dist/ e 5. varredura
-  fs.rmSync(rel('dist'), { recursive: true, force: true });
-  copiarArvore(rel('app'), rel('dist'));
-  const achados = varrerVazamento(rel('dist'));
+  fs.rmSync(dirDist, { recursive: true, force: true });
+  copiarArvore(dirApp, dirDist);
+  const achados = varrerVazamento(dirDist);
   if (achados.length) {
-    fs.rmSync(rel('dist'), { recursive: true, force: true });
-    for (const [f, motivo] of achados) console.error(`VAZAMENTO em ${path.relative(raiz, f)}: ${motivo}`);
-    console.error('Build abortado: dist/ removido.');
+    fs.rmSync(dirDist, { recursive: true, force: true });
+    for (const [f, motivo] of achados) console.error(`VAZAMENTO em ${mostrar(f)}: ${motivo}`);
+    console.error(`Build abortado: ${mostrar(dirDist)} removido.`);
     process.exit(4);
   }
-  console.log('dist/ montado, sem dado pessoal.');
+  console.log(`${mostrar(dirDist)} montado, sem dado pessoal.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) principal();

@@ -13,18 +13,19 @@ import * as esbuild from 'esbuild';
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (...p) => path.join(raiz, ...p);
 
-export function copiarModulosPlanoA() {
-  fs.mkdirSync(rel('app/js/carga'), { recursive: true });
-  fs.mkdirSync(rel('app/js/modelo'), { recursive: true });
-  for (const f of fs.readdirSync(rel('src/carga')).filter((x) => x.endsWith('.js'))) fs.copyFileSync(rel('src/carga', f), rel('app/js/carga', f));
-  fs.copyFileSync(rel('src/modelo/atuacao.js'), rel('app/js/modelo/atuacao.js'));
+/** dirApp: pasta do artefato (padrão app/). Os testes de build passam uma cópia temporária, para não disputar app/js com os outros testes. */
+export function copiarModulosPlanoA(dirApp = rel('app')) {
+  fs.mkdirSync(path.join(dirApp, 'js/carga'), { recursive: true });
+  fs.mkdirSync(path.join(dirApp, 'js/modelo'), { recursive: true });
+  for (const f of fs.readdirSync(rel('src/carga')).filter((x) => x.endsWith('.js'))) fs.copyFileSync(rel('src/carga', f), path.join(dirApp, 'js/carga', f));
+  fs.copyFileSync(rel('src/modelo/atuacao.js'), path.join(dirApp, 'js/modelo/atuacao.js'));
 }
 
-export function gerarBundle() {
-  copiarModulosPlanoA();
+export function gerarBundle(dirApp = rel('app')) {
+  copiarModulosPlanoA(dirApp);
   esbuild.buildSync({
-    entryPoints: [rel('app/js/lgh.js')],
-    outfile: rel('app/js/lgh.bundle.js'),
+    entryPoints: [path.join(dirApp, 'js/lgh.js')],
+    outfile: path.join(dirApp, 'js/lgh.bundle.js'),
     bundle: true,
     format: 'iife',
     globalName: 'LGH',
@@ -36,7 +37,7 @@ export function gerarBundle() {
     // organizacao.js lê a tabela de equivalência pelo import.meta só no Node; no navegador cai para [] e a página passa a tabela.
     logOverride: { 'empty-import-meta': 'silent' },
   });
-  return rel('app/js/lgh.bundle.js');
+  return path.join(dirApp, 'js/lgh.bundle.js');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

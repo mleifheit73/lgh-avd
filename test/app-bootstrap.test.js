@@ -226,7 +226,7 @@ test('atuacoesIniciais: ciclo vindo do piloto é logado como arvore_invalida_na_
 });
 test('atuacoesIniciais: exclusões silenciosas viram log (PJ ignorado, pessoa sem vínculo, pessoa inexistente)', () => {
   const b = base();
-  b.pessoas.push({ id: 'ORFA', nome: 'PESSOA SEM VINCULO TESTE', status: 'ativo', motivoStatus: null, cpfHash: null, faixaEtaria: null, nomesAlternativos: [] });
+  b.pessoas.push({ id: 'ORFA', nome: 'PESSOA SEM VINCULO TESTE', status: 'ativo', motivoStatus: null, faixaEtaria: null, nomesAlternativos: [] });
   b.vinculos.push({ pessoaId: 'FANTASMA', regime: 'CLT', empresa: 'BRANO', empresaOriginal: 'BRANO', cargo: 'X', inicio: '2022-01-01', filial: 'BRANO', codigo: '1', chave: 'BRANO|1' });
   b.vinculos.push({ pessoaId: 'CAM', regime: 'PJ', empresa: 'EMPRESA SEM FILIAL', empresaOriginal: 'EMPRESA SEM FILIAL LTDA', cargo: 'CONSULTOR', inicio: '2026-01-10' });
   const { log } = atuacoesIniciais(b, organizacoesDe(b, FUSAO_MINI), {}, { organizacaoPiloto: 'GOLDEN' });

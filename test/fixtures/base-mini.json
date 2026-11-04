@@ -8,7 +8,6 @@
    "nome": "CAMAREIRA TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0101010101010101010101010101010101010101010101010101010101010101",
    "faixaEtaria": "25 a 34",
    "nomesAlternativos": []
   },
@@ -17,7 +16,6 @@
    "nome": "SUPERVISOR DE GOVERNANCA TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0202020202020202020202020202020202020202020202020202020202020202",
    "faixaEtaria": "35 a 44",
    "nomesAlternativos": []
   },
@@ -26,7 +24,6 @@
    "nome": "GERENTE GERAL TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0303030303030303030303030303030303030303030303030303030303030303",
    "faixaEtaria": "45 a 54",
    "nomesAlternativos": []
   },
@@ -35,7 +32,6 @@
    "nome": "ANA TESTE DUPLA FILIAL",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0404040404040404040404040404040404040404040404040404040404040404",
    "faixaEtaria": "25 a 34",
    "nomesAlternativos": []
   },
@@ -44,7 +40,6 @@
    "nome": "CEO DA REDE TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0505050505050505050505050505050505050505050505050505050505050505",
    "faixaEtaria": "55 ou mais",
    "nomesAlternativos": []
   },
@@ -53,7 +48,6 @@
    "nome": "DIRETOR REGIONAL TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0606060606060606060606060606060606060606060606060606060606060606",
    "faixaEtaria": "45 a 54",
    "nomesAlternativos": []
   },
@@ -62,7 +56,6 @@
    "nome": "PESSOA CLT E PJ TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0707070707070707070707070707070707070707070707070707070707070707",
    "faixaEtaria": "35 a 44",
    "nomesAlternativos": []
   },
@@ -71,7 +64,6 @@
    "nome": "PESSOA PJ SEM FILIAL TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": null,
    "faixaEtaria": null,
    "nomesAlternativos": []
   },
@@ -80,7 +72,6 @@
    "nome": "RECEPCIONISTA UM TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0909090909090909090909090909090909090909090909090909090909090909",
    "faixaEtaria": "até 24",
    "nomesAlternativos": []
   },
@@ -89,7 +80,6 @@
    "nome": "COZINHEIRO UM TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
    "faixaEtaria": "35 a 44",
    "nomesAlternativos": []
   },
@@ -98,7 +88,6 @@
    "nome": "GARCOM UM TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
    "faixaEtaria": "até 24",
    "nomesAlternativos": []
   },
@@ -107,7 +96,6 @@
    "nome": "RECEPCIONISTA BRANO TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
    "faixaEtaria": "25 a 34",
    "nomesAlternativos": []
   },
@@ -116,7 +104,6 @@
    "nome": "CAMAREIRA BRANO TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
    "faixaEtaria": "45 a 54",
    "nomesAlternativos": []
   },
@@ -125,7 +112,6 @@
    "nome": "SUPERVISOR BRANO TESTE",
    "status": "ativo",
    "motivoStatus": null,
-   "cpfHash": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
    "faixaEtaria": "35 a 44",
    "nomesAlternativos": []
   }
