@@ -2124,9 +2124,9 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   S.av2Filtro = S.av2Filtro || '';      /* '', 'concluida', 'pendente' */
   S.av2PorCiclo = !!S.av2PorCiclo;
 
-  function enviosDe(p){
-    const lista = [];
-    ['colab','lider'].forEach(tipo => (ENVIADAS[p.id+'|'+tipo]||[]).forEach(v => lista.push({...v, tipo:v.tipo||tipo})));
+  function enviosDe(p){   /* Plano B: só a atuação da linha (escopo por atuação, spec 6) */
+    const lista = [], id = idAtuacaoDe(p);
+    ['colab','lider'].forEach(tipo => (ENVIADAS[id+'|'+tipo]||[]).forEach(v => lista.push({...v, tipo:v.tipo||tipo})));
     return lista.sort((a,b)=> (b.versao||0)-(a.versao||0));
   }
   function ultimoEnvio(p){ const e = enviosDe(p); return e.length ? e[0] : null; }
@@ -2155,7 +2155,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     });
     document.querySelectorAll('#av-kpis .kpi[data-filtro]').forEach(k => k.setAttribute('aria-pressed', String(k.dataset.filtro===S.av2Filtro)));
     const barra = $('#av2-barra'); if(!barra) return;
-    const meus = avaliadosDe(S.perfil.nome);
+    const meus = itensDoAvaliador();
     const n = S.av2Filtro ? meus.filter(p => (concluida(p)?'concluida':'pendente')===S.av2Filtro).length : 0;
     barra.querySelector('#av2-chip').innerHTML = S.av2Filtro
       ? `<span class="chip">Mostrando ${n} ${S.av2Filtro==='pendente' ? (n===1?'pendente':'pendentes') : (n===1?'concluída':'concluídas')}
@@ -2168,7 +2168,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   function renderPorCiclo(){
     const alvo = $('#av2-ciclos'); if(!alvo) return;
     if(!S.av2PorCiclo){ alvo.innerHTML=''; alvo.hidden=true; return; }
-    const ciclos = ciclosDoAno(), meus = avaliadosDe(S.perfil.nome);
+    const ciclos = ciclosDoAno(), meus = itensDoAvaliador();
     const linhas = meus.filter(p => !S.av2Filtro || (concluida(p)?'concluida':'pendente')===S.av2Filtro);
     alvo.hidden = false;
     alvo.innerHTML = `<div class="card" style="margin-top:14px">
@@ -2177,7 +2177,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
         <span style="font-size:.8rem;color:var(--muted)">A avaliação de colaboradores é semestral: dois ciclos por ano. Só avaliações enviadas aparecem aqui.</span></div>
       <div class="scroll" style="border:0;margin-top:8px"><table><thead><tr><th>Colaborador</th>${ciclos.map(c=>`<th>${esc(c.nome)}<br><span style="font-weight:400;text-transform:none;letter-spacing:0">${esc(c.ref)} · ${esc(c.status)}</span></th>`).join('')}</tr></thead>
       <tbody>${linhas.map(p => `<tr>
-        <td><button class="av2-nome" data-av2-pessoa="${p.id}">${esc(p.nome)}</button><br><span style="color:var(--muted);font-size:.78rem">${esc(p.cargo)}</span></td>
+        <td><button class="av2-nome" data-av2-pessoa="${esc(p.atuacaoId)}">${esc(p.nome)}</button><br><span style="color:var(--muted);font-size:.78rem">${esc(p.cargo)}${p.totalAtuacoes>1?` · ${p.ordem}ª atuação`:''}</span></td>
         ${ciclos.map(c => { const e = enviosNoCiclo(p, c.id);
           if(e.length){ const u = e[0]; return `<td><span class="tag t-ok">Avaliado</span><span class="quando">${esc(u.em)} · nota ${num(u.media)}</span></td>`; }
           if(c.status==='Planejado') return `<td><span style="color:var(--muted);font-size:.8rem">Ciclo ainda não aberto</span></td>`;
@@ -2189,6 +2189,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   /* 2. historico do colaborador (gaveta) */
   function abrirHistorico(p){
     const dr = $('#av2-drawer'), envios = enviosDe(p);
+    dr.dataset.atuacao = p.atuacaoId || '';   /* lido pelo bloco IND */
     $('#av2-dr-nome').textContent = p.nome;
     $('#av2-dr-sub').textContent = `${p.cargo} · ${p.equipe} · ${p.filial}`;
     $('#av2-dr-corpo').innerHTML = envios.length
@@ -2220,7 +2221,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   document.addEventListener('keydown', e => { if(e.key==='Escape' && $('#av2-drawer').dataset.aberto==='true') fechar(); });
 
   function ligarNomes(raiz){
-    raiz.querySelectorAll('[data-av2-pessoa]').forEach(b => b.onclick = ()=>{ const p = PESSOAS.find(x=>x.id===b.dataset.av2Pessoa); if(p) abrirHistorico(p); });
+    raiz.querySelectorAll('[data-av2-pessoa]').forEach(b => b.onclick = ()=>{ const p = colabPorAtuacao(b.dataset.av2Pessoa); if(p) abrirHistorico(p); });
   }
 
   /* envolve o render original sem alterar o seu codigo */
@@ -2231,9 +2232,9 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     /* nomes clicaveis e status por linha */
     document.querySelectorAll('#av-equipes tbody tr').forEach(tr => {
       const btn = tr.querySelector('[data-abrir]'); if(!btn) return;
-      const p = PESSOAS.find(x=>x.id===btn.dataset.abrir); if(!p) return;
+      const p = colabPorAtuacao(btn.dataset.abrir); if(!p) return;
       tr.dataset.av2Status = concluida(p) ? 'concluida' : 'pendente';
-      const b = tr.querySelector('td b'); if(b && !b.querySelector('.av2-nome')) b.innerHTML = `<button class="av2-nome" data-av2-pessoa="${p.id}" title="Ver avaliações enviadas de ${esc(p.nome)}">${esc(p.nome)}</button>`;
+      const b = tr.querySelector('td b'); if(b && !b.querySelector('.av2-nome')) b.innerHTML = `<button class="av2-nome" data-av2-pessoa="${esc(p.atuacaoId)}" title="Ver avaliações enviadas de ${esc(p.nome)}">${esc(p.nome)}</button>`;
     });
     ligarNomes($('#av-equipes'));
     /* KPIs clicaveis */
@@ -2273,7 +2274,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   const faixa = $('#db-estado'), txt = $('#db-estado-txt');
   const nav = $('#nav'); if(nav) nav.after(faixa);
   function estado(st, msg){ faixa.hidden = false; faixa.dataset.st = st; txt.textContent = msg; }
-  const idDoc = chave => chave.replace(/\|/g, ':');
+  /* Plano B (R5): chave atuacaoId|tipo; o id do documento só aceita letras, dígitos e _ - . ~ : @ + (codificação injetiva no adaptador) */
+  const idDoc = chave => LGH.idDocumentoAvaliacao(chave);
   let db = null, ultimo = {}, gravando = Promise.resolve(), pronto = false;
 
   function snapshotLocal(){
@@ -2350,21 +2352,24 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
 <script id="bloco-lid">
 (function(){
   if(typeof PESSOAS === 'undefined' || typeof renderForm !== 'function') return;
-  const UNIDADE = 'Hotel Laghetto Golden';
-  USUARIOS.forEach(u => { if(u.unidade == null) u.unidade = /Golden/.test(u.escopo||'') ? UNIDADE : ''; });
+  const UNIDADE = 'Hotel Laghetto Golden';   /* só para as contas de demonstração da v34, cujo escopo cita o Golden */
+  aposBoot(()=>{ USUARIOS.forEach(u => { if(u.unidade == null) u.unidade = /Golden/.test(u.escopo||'') ? UNIDADE : ''; }); });
   const contaDe = p => USUARIOS.find(u => u.nome === p.nome);
+  /* Plano B: a marca de líder vive na atuação (podeLiderar). Conta segue quem lidera em qualquer organização. */
+  const lideraEmAlguma = () => new Set((S.atuacoes||[]).filter(a=>a.podeLiderar && a.situacao==='ativa' && a.fim==null).map(a=>a.pessoaRef));
   const quem = () => S.perfil ? S.perfil.nome : 'RH';
 
   /* ---- contas acompanham a marca de líder ---- */
   function reconciliarContas(autor){
+    const lideres = lideraEmAlguma(), unidade = nomeOrganizacao();
     PESSOAS.forEach(p => {
-      const c = contaDe(p);
-      if(p.lider && !c){
-        USUARIOS.push({nome:p.nome, cargo:p.cargo, cpf:'', email:'', papel:'avaliador', nivel:'N1', escopo:p.setor+' · '+UNIDADE, unidade:UNIDADE,
+      const c = contaDe(p), lider = lideres.has(p.id);
+      if(lider && !c){
+        USUARIOS.push({nome:p.nome, cargo:p.cargo, cpf:'', email:'', papel:'avaliador', nivel:'N1', escopo:p.setor+' · '+unidade, unidade,
                        ativo:true, origem:'lider', criadaPor:autor, criadaEm:agora()});
-      } else if(p.lider && c && c.desativadaPorLider){ c.ativo = true; delete c.desativadaPorLider; }
-      else if(!p.lider && c && c.origem==='lider'){ USUARIOS.splice(USUARIOS.indexOf(c), 1); } /* conta criada por este fluxo some junto */
-      else if(!p.lider && c && c.papel==='avaliador' && c.ativo){ c.ativo = false; c.desativadaPorLider = true; }
+      } else if(lider && c && c.desativadaPorLider){ c.ativo = true; delete c.desativadaPorLider; }
+      else if(!lider && c && c.origem==='lider'){ USUARIOS.splice(USUARIOS.indexOf(c), 1); } /* conta criada por este fluxo some junto */
+      else if(!lider && c && c.papel==='avaliador' && c.ativo){ c.ativo = false; c.desativadaPorLider = true; }
     });
   }
   function definirLider(p, valor){
@@ -2372,7 +2377,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
       const n = avaliadosDe(p.nome).length;
       if(n) return {ok:false, msg:`${p.nome} ainda avalia ${n} ${n===1?'pessoa':'pessoas'}. Remova ${n===1?'esse avaliado':'esses avaliados'} na Matriz antes de retirar a marca de líder.`};
     }
-    mudar(`${valor?'marcar':'desmarcar'} ${p.nome} como líder`, ()=>{ p.lider = valor; });
+    mudar(`${valor?'marcar':'desmarcar'} ${p.nome} como líder`, ()=>{ p.atuacoes.forEach(id => LGH.marcarLider(S, id, valor)); });
     reconciliarContas(quem());
     persistir();
     return {ok:true, msg: valor
@@ -2386,7 +2391,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   let db = window.LGH_DB || null, ultimoJson = '', fila = Promise.resolve();
   function persistir(){
     if(!db) return;
-    const dados = { lideres: PESSOAS.filter(p=>p.lider).map(p=>p.id), usuarios: USUARIOS, atualizadoEm: new Date().toISOString() };
+    const marcadas = (S.atuacoes||[]).filter(a=>a.podeLiderar && a.situacao==='ativa' && a.fim==null);
+    const dados = { lideres: [...new Set(marcadas.map(a=>a.pessoaRef))], lideresAtuacoes: marcadas.map(a=>a.id), usuarios: USUARIOS, atualizadoEm: new Date().toISOString() };
     const json = JSON.stringify(dados); if(json === ultimoJson) return;
     fila = fila.then(async ()=>{ try{ await db.doc('config/lideres-e-contas').set(JSON.parse(json)); ultimoJson = json; }catch(e){ console.warn('lid: falha ao gravar', e); } });
   }
@@ -2396,9 +2402,12 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
       const snap = await db.doc('config/lideres-e-contas').get();
       if(!snap.exists) return;
       const d = snap.data(); if(!d || !Array.isArray(d.lideres) || !Array.isArray(d.usuarios)) return;
-      PESSOAS.forEach(p => { p.lider = d.lideres.includes(p.id); });
+      /* lideresAtuacoes (Plano B) manda; sem ela, a lista de pessoas vale para todas as atuações correntes da pessoa */
+      const porAtuacao = Array.isArray(d.lideresAtuacoes) ? new Set(d.lideresAtuacoes) : null, porPessoa = new Set(d.lideres);
+      (S.atuacoes||[]).forEach(a => { if(a.situacao==='ativa' && a.fim==null) a.podeLiderar = porAtuacao ? porAtuacao.has(a.id) : porPessoa.has(a.pessoaRef); });
+      reconstruirViews();
       USUARIOS.splice(0, USUARIOS.length, ...d.usuarios);
-      ultimoJson = JSON.stringify({ lideres: d.lideres, usuarios: d.usuarios, atualizadoEm: d.atualizadoEm });
+      ultimoJson = JSON.stringify(d.lideresAtuacoes ? { lideres: d.lideres, lideresAtuacoes: d.lideresAtuacoes, usuarios: d.usuarios, atualizadoEm: d.atualizadoEm } : { lideres: d.lideres, usuarios: d.usuarios, atualizadoEm: d.atualizadoEm });
       const f = {form:renderForm, matriz:renderMatriz, usuarios:renderUsuarios, avaliador:renderAvaliador}[S.tela]; if(f && S.perfil) f();
     }catch(e){ console.warn('lid: falha ao ler', e); }
   }
@@ -2467,14 +2476,15 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     if(!admin) return;
     let barra = $('#lid-us');
     if(!barra){ barra = document.createElement('div'); barra.id = 'lid-us'; $('#us-tabela').closest('.scroll').before(barra); }
-    const unidades = [...new Set(USUARIOS.map(u => u.unidade).filter(Boolean))].sort();
+    const unidades = [...new Set([...USUARIOS.map(u => u.unidade), nomeOrganizacao()].filter(Boolean))].sort();
+    const daOrgSelecionada = S.lidUnidade === nomeOrganizacao();
     barra.innerHTML = `<label class="lbl">Hotel ou empresa <select id="lid-unidade" class="sel-setor">
         <option value="">Todas (${USUARIOS.length})</option>
         ${unidades.map(u => `<option value="${esc(u)}" ${u===S.lidUnidade?'selected':''}>${esc(u)}</option>`).join('')}
         <option value="__rede">Contas da rede e regionais</option></select></label>
-      ${S.lidUnidade && S.lidUnidade!=='__rede' ? `<span id="lid-busca-caixa"><button class="btn sec" id="lid-add">Adicionar avaliador de ${esc(S.lidUnidade)}</button>
+      ${daOrgSelecionada ? `<span id="lid-busca-caixa"><button class="btn sec" id="lid-add">Adicionar avaliador de ${esc(S.lidUnidade)}</button>
         <div id="lid-busca-lista" hidden></div></span>` : ''}
-      <span style="font-size:.78rem;color:var(--muted)">No protótipo só o ${esc(UNIDADE)} está carregado; as demais unidades entram com a carga da rede.</span>`;
+      <span style="font-size:.78rem;color:var(--muted)">O filtro acompanha a organização escolhida no topo. Para adicionar avaliador de outra unidade, troque a organização lá.</span>`;
     $('#lid-unidade').onchange = ()=>{ S.lidUnidade = $('#lid-unidade').value; renderUsuarios(); };
     [...tbody.querySelectorAll('tr')].forEach(tr => {
       const un = tr.dataset.lidUnidade || '';
@@ -2585,8 +2595,9 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   };
   const renderFormOriginal2 = renderForm;
   renderForm = function(){
-    if(S.colab){ const lista = ENVIADAS[S.colab.id+'|'+(S.colab.lider?'lider':'colab')] || []; const u = lista[lista.length-1];
-      S.formVersaoFixa = (u && !(S.reabertas||{})[S.colab.id+'|'+(S.colab.lider?'lider':'colab')]) ? {tipo:S.colab.lider?'lider':'colab', versao:u.formVersao||1} : null; }
+    if(S.colab){ const id = idAtuacaoDe(S.colab), t = S.colab.lider?'lider':'colab';   /* Plano B: chave por atuação (R5) */
+      const lista = ENVIADAS[id+'|'+t] || []; const u = lista[lista.length-1];
+      S.formVersaoFixa = (u && !(S.reabertas||{})[id+'|'+t]) ? {tipo:t, versao:u.formVersao||1} : null; }
     renderFormOriginal2.apply(this, arguments);
     const lbl = document.querySelector('#t-form .lid-rotulo');
     if(lbl && S.colab){ let r = lbl.querySelector('.fm-versao-rotulo'); if(!r){ r = document.createElement('span'); r.className='fm-versao-rotulo'; lbl.appendChild(r); } r.textContent = 'versão ' + FORMS[S.tipo].versao; }
@@ -2756,12 +2767,12 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     if(!S.fixEscolhido){
       cab.innerHTML = `<div class="quem"><b>Escolha quem vai avaliar</b><span>A lista mostra só as pessoas do seu escopo. Depois de escolher, o nome fica fixo no formulário.</span></div>`;
       if(!esc_){ esc_ = document.createElement('div'); esc_.id='fix-escolha'; esc_.className='card fix-escolha'; card.after(esc_); }
-      const lista = visiveis();
+      const lista = itensVisiveis();   /* Plano B: uma linha por atuação */
       esc_.hidden = false;
-      esc_.innerHTML = `<div class="scroll" style="border:0"><table><tbody>${lista.map(p=>`<tr><td style="width:45%"><b>${esc(p.nome)}</b><br><span style="color:var(--muted);font-size:.8rem">${esc(p.cargo)} · ${esc(p.setor)}</span></td>
+      esc_.innerHTML = `<div class="scroll" style="border:0"><table><tbody>${lista.map(p=>`<tr><td style="width:45%"><b>${esc(p.nome)}</b>${p.totalAtuacoes>1?` <span class="tag t-pend">${p.ordem}ª atuação</span>`:''}<br><span style="color:var(--muted);font-size:.8rem">${esc(p.cargo)} · ${esc(p.setor)}</span></td>
         <td>${concluida(p)?'<span class="tag t-ok">Concluída</span>':'<span class="tag t-pend">Pendente</span>'}</td>
-        <td style="text-align:right"><button class="linkish" data-fix-escolher="${p.id}">${concluida(p)?'Abrir':'Avaliar'}</button></td></tr>`).join('') || '<tr><td>Nenhum colaborador no seu escopo.</td></tr>'}</tbody></table></div>`;
-      esc_.querySelectorAll('[data-fix-escolher]').forEach(b => b.onclick = ()=>{ S.colab = PESSOAS.find(x=>x.id===b.dataset.fixEscolher); S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; S.fixEscolhido = true; S.fixViaNav = false; renderForm(); });
+        <td style="text-align:right"><button class="linkish" data-fix-escolher="${esc(p.atuacaoId)}">${concluida(p)?'Abrir':'Avaliar'}</button></td></tr>`).join('') || '<tr><td>Nenhum colaborador no seu escopo.</td></tr>'}</tbody></table></div>`;
+      esc_.querySelectorAll('[data-fix-escolher]').forEach(b => b.onclick = ()=>{ S.colab = colabPorAtuacao(b.dataset.fixEscolher); S.notas={}; S.obs={}; S.salvo=false; S.relatorio=''; S.fixEscolhido = true; S.fixViaNav = false; renderForm(); });
       [...card.children].forEach(el => { if(el!==cab) el.hidden = true; });
       const resto = [...document.querySelectorAll('#t-form > *')].filter(el => el!==card && el!==esc_ && !el.classList.contains('head') && el.id!=='fm-prazo');
       resto.forEach(el => el.hidden = true);
@@ -2816,7 +2827,10 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
   const DIA = 24*60*60*1000;
   const quem = () => S.perfil ? S.perfil.nome : 'Avaliador';
   const chaveLeitura = () => S.perfil ? (S.perfil.papel + ':' + S.perfil.nome) : '';
-  const enviosDe = p => { const l = []; ['colab','lider'].forEach(t => (ENVIADAS[p.id+'|'+t]||[]).forEach(v => l.push({...v, tipo:v.tipo||t}))); return l.sort((a,b)=>(a.ciclo||0)-(b.ciclo||0) || (a.versao||0)-(b.versao||0)); };
+  /* Plano B: avaliações da atuação (registro com atuacaoId) ou de todas as atuações da pessoa na visão */
+  const enviosDe = p => { const l = []; const ids = p.atuacaoId ? [p.atuacaoId] : (p.atuacoes||[]);
+    ids.forEach(id => ['colab','lider'].forEach(t => (ENVIADAS[id+'|'+t]||[]).forEach(v => l.push({...v, tipo:v.tipo||t}))));
+    return l.sort((a,b)=>(a.ciclo||0)-(b.ciclo||0) || (a.versao||0)-(b.versao||0)); };
 
   /* ---- persistência ---- */
   let db = window.LGH_DB || null; const gravados = new Map(); let fila = Promise.resolve();
@@ -2857,7 +2871,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     if(relato.trim().length < 80) return {ok:false, msg:'O relato precisa descrever os motivos com fatos. Escreva ao menos 80 caracteres.'};
     if(INDICACOES.some(i => i.pessoaId===p.id && !['arquivada','retirada'].includes(i.status))) return {ok:false, msg:`${p.nome} já tem uma indicação em aberto. Acompanhe na aba Indicações.`};
     const agoraISO = new Date().toISOString();
-    const ind = { id:'ind-'+Date.now().toString(36), pessoaId:p.id, pessoaNome:p.nome, cargoAtual:p.cargo, setor:p.setor, unidade:'Hotel Laghetto Golden',
+    const ind = { id:'ind-'+Date.now().toString(36), pessoaId:p.id, atuacaoId:p.atuacaoId||null, organizacaoId:p.organizacaoId||S.organizacaoSelecionada, pessoaNome:p.nome, cargoAtual:p.cargo, setor:p.setor, unidade:nomeOrganizacao(),
       por:quem(), em:agora(), emISO:agoraISO, cargoPretendido:cargo.trim(), relato:relato.trim(), status:'recebida',
       avaliacoesNaIndicacao: envios.map(v => ({ciclo:v.ciclo, cicloNome:v.cicloNome, tipo:v.tipo, formVersao:v.formVersao||1, versao:v.versao, em:v.em, por:v.por, media:v.media})),
       historico:[{quando:agora(), quandoISO:agoraISO, por:quem(), de:null, para:'recebida', motivo:'Indicação enviada pelo líder imediato.'}],
@@ -2879,7 +2893,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
     obs.observe(dr, {attributes:true, attributeFilter:['data-aberto']});
   }
   function injetarBotao(){
-    const corpo = $('#av2-dr-corpo'); const nome = $('#av2-dr-nome').textContent; const p = PESSOAS.find(x=>x.nome===nome); if(!corpo || !p) return;
+    const corpo = $('#av2-dr-corpo'); const nome = $('#av2-dr-nome').textContent;
+    const atuacao = $('#av2-drawer').dataset.atuacao; const p = (atuacao && colabPorAtuacao(atuacao)) || PESSOAS.find(x=>x.nome===nome); if(!corpo || !p) return;
     const envios = enviosDe(p); const aberta = INDICACOES.find(i => i.pessoaId===p.id && !['arquivada','retirada'].includes(i.status));
     const wrap = document.createElement('div'); wrap.id = 'ind-botao'; wrap.style.marginTop = '16px';
     wrap.innerHTML = aberta
@@ -2956,7 +2971,7 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
 
   function renderDossie(ind){
     if(!(ind.lidasPor||{})[chaveLeitura()]){ ind.lidasPor = {...(ind.lidasPor||{}), [chaveLeitura()]:true}; persistir(ind); montarNav(); }
-    const p = PESSOAS.find(x=>x.id===ind.pessoaId); const envios = p ? enviosDe(p) : [];
+    const p = PESSOAS.find(x=>x.id===ind.pessoaId); const envios = ind.atuacaoId ? enviosDe({atuacaoId:ind.atuacaoId}) : (p ? enviosDe(p) : []);
     const rh = S.perfil && ['rh_unidade','rh_regional','admin'].includes(S.perfil.papel);
     $('#ind-corpo').innerHTML = `<p><button class="linkish" id="ind-voltar" style="background:none;border:0;cursor:pointer;font-family:inherit">← Todas as indicações</button></p>
       <div class="card"><div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">

@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { lerFixture, carregarPagina } from './helpers/pagina.js';
 import { atuacoesDe, validarArvore } from '../app/js/modelo/atuacao.js';
@@ -219,4 +220,27 @@ test('Evolução lista por atuação e lê ENVIADAS pela atuação', async () =>
   assert.match(document.querySelector('#ev-origem').textContent, /Primeiro ciclo com dado real/);
   sel.value = 'GOLDEN|CAM|2'; sel.dispatchEvent(new window.Event('change'));
   assert.match(document.querySelector('#ev-origem').textContent, /Nenhuma avaliação enviada/);
+});
+
+const temDadosReais = fs.existsSync('app/data/base.json') && fs.existsSync('app/data/piloto-golden.json');
+test('base real: Golden selecionado por padrão, Matriz só com o Golden, nunca a rede inteira', { skip: !temDadosReais }, async () => {
+  const baseReal = JSON.parse(fs.readFileSync('app/data/base.json', 'utf8'));
+  const pilotoReal = JSON.parse(fs.readFileSync('app/data/piloto-golden.json', 'utf8'));
+  const t0 = Date.now();
+  const { S, window, document, erros } = await carregarPagina(baseReal, pilotoReal);
+  const tBoot = Date.now() - t0;
+  assert.equal(S.organizacaoSelecionada, 'HOTEL LAGHETTO GOLDEN');
+  const n = window.eval('PESSOAS.length');
+  window.eval("entrar(USUARIOS.find(u=>u.nome==='Jaqueline Olivaris Goncalves Madeira'))");
+  const t1 = Date.now(); window.irPara('matriz'); const tMatriz = Date.now() - t1;
+  const linhas = document.querySelectorAll('#m-tabela tbody tr').length;
+  assert.equal(linhas, n);
+  assert.ok(n < baseReal.pessoas.length / 4, `a Matriz tem ${n} linhas de ${baseReal.pessoas.length} pessoas`);
+  window.irPara('rh');
+  const t2 = Date.now(); window.eval("trocarOrganizacao('LAGHETTO CORPORATIVO')"); const tTroca = Date.now() - t2;
+  window.eval("entrar(USUARIOS.find(u=>u.nome==='Rafael Schmeier Nunes'))");
+  const meus = document.querySelectorAll('#av-equipes tbody tr').length;
+  console.log(`# base real: ${baseReal.pessoas.length} pessoas; Golden ${n}; boot ${tBoot} ms; Matriz ${tMatriz} ms; troca de organização ${tTroca} ms; painel do Rafael ${meus} linhas`);
+  assert.ok(meus > 0);
+  assert.deepEqual(erros, []);
 });

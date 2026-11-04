@@ -415,9 +415,12 @@ export function limparSuperiores(S, pessoaId, organizacaoId, autor, quando = hoj
  * Injetiva: chaves diferentes nunca dão o mesmo id.
  */
 export function idDocumentoAvaliacao(chave) {
-  const seg = s => [...new TextEncoder().encode(s)].map(b => {
-    const c = String.fromCharCode(b);
-    return /[A-Za-z0-9_\-.@+]/.test(c) ? c : '~' + b.toString(16).toUpperCase().padStart(2, '0');
+  // UTF-8 por encodeURIComponent (o jsdom não tem TextEncoder); o que ele não escapa (! ' ( ) * ~) vai em hexadecimal à mão
+  const hex = c => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+  const seg = s => Array.from(s).map(c => {
+    if (/[A-Za-z0-9_\-.@+]/.test(c)) return c;
+    const e = encodeURIComponent(c);
+    return e === c ? hex(c) : e.replace(/%/g, '~');
   }).join('');
   return String(chave).split('|').map(seg).join(':');
 }
