@@ -4071,7 +4071,12 @@ Regras:
      Regra do banco (a Tarefa 9 publica): { path: 'montagem', read: 'view', write: 'admin' }: todo mundo que abre lê,
      só Editor e dono gravam.
      Documento montagem/<idDocMontagem(organizacaoId)>: { organizacaoId, versao, alteradas, criadas, removidasIds, idsUsados,
-     autor, quando }. Nunca recebe a base, nome, cargo da base nem hash: só atuações (ids, função e estrutura).
+     autor, quando }. O que é gravado, exatamente (M7): ids de atuação e de pessoa; em alteradas só os campos de montagem que
+     mudaram (superior, raiz, origem, método de inferência, marca de líder, situação, fim, função, setor e equipe, situação
+     funcional); em criadas o registro inteiro da atuação nova (inclui função, setor, turno e início); e o nome de quem fez
+     a alteração no sistema, o perfil logado (autor, confirmadaPor, encerradaPor). Função é o texto do cargo de trabalho.
+     Nunca é gravado: a base, o nome, o cargo da base ou a faixa etária da pessoa avaliada, CPF ou hash de CPF.
+     Ao carregar, cada documento é conferido contra a árvore da organização (I3); recusado, fica intacto e a faixa avisa.
      Concorrência: a última gravação vence, sem mesclagem. Duas pessoas montando a mesma organização ao mesmo tempo:
      vale o documento de quem gravou por último. ===== -->
 <style id="bloco-persistencia-css">
