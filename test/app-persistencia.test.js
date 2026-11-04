@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { lerFixture, carregarPagina } from './helpers/pagina.js';
 import { montarEstado } from './helpers/estado.js';
-import { reconstruirViews, definirSuperior, removerSuperior, confirmarInferido, marcarLider, criarAtuacaoNaOrganizacao, ehCorrente } from '../app/js/adaptador.js';
+import { reconstruirViews, definirSuperior, removerSuperior, confirmarInferido, marcarLider, criarAtuacaoNaOrganizacao, ehCorrente, definirCampoPessoa } from '../app/js/adaptador.js';
 import { adicionarEmBloco } from '../app/js/modelo/montagem.js';
 import {
-  CAMPOS_MONTAGEM, calcularDelta, aplicarDelta, organizacoesNoDelta, deltaPorOrganizacao, organizacaoDoId, idDocMontagem,
+  CAMPOS_MONTAGEM, GRUPOS_MONTAGEM, VERSAO_DELTA, calcularDelta, aplicarDelta, aplicarDeltaConferido, organizacoesNoDelta, deltaPorOrganizacao,
+  organizacaoDoId, idDocMontagem,
 } from '../app/js/modelo/persistencia.js';
 
 const FUSAO_MINI = [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOLDEN RESORT'] }];
@@ -36,7 +37,8 @@ test('CAMPOS_MONTAGEM nomeia os campos de montagem que tornam uma atuação alte
 test('calcularDelta vazio quando nada mudou', () => {
   const S = estado();
   const d = calcularDelta(S.atuacoesBase, S.atuacoes);
-  assert.deepEqual(d, { versao: 1, alteradas: [], criadas: [], removidasIds: [] });
+  assert.deepEqual(d, { versao: VERSAO_DELTA, alteradas: [], criadas: [], removidasIds: [] });
+  assert.equal(VERSAO_DELTA, 2, 'I3: alteradas só com os campos de montagem');
   assert.deepEqual(organizacoesNoDelta(d), []);
 });
 
@@ -154,7 +156,7 @@ test('deltaPorOrganizacao separa GOLDEN e LAGHETTO CORPORATIVO; organizacaoDoId 
   assert.deepEqual(partes.GOLDEN.alteradas.map(a => a.id), [idDe(S, 'COZ1')]);
   assert.deepEqual(partes.GOLDEN.criadas, []);
   assert.deepEqual(partes[CORP].criadas.map(a => a.id), [r.atuacao.id]);
-  assert.equal(partes[CORP].versao, 1);
+  assert.equal(partes[CORP].versao, VERSAO_DELTA);
   assert.equal(organizacaoDoId('HOTEL LAGHETTO GOLDEN|abc123|2'), 'HOTEL LAGHETTO GOLDEN');
 });
 
@@ -163,6 +165,87 @@ test('idDocMontagem: só caracteres permitidos no id de documento', () => {
   assert.equal(idDocMontagem('HOTEL LAGHETTO GOLDEN'), 'HOTEL_LAGHETTO_GOLDEN');
   assert.equal(idDocMontagem('LAGHETTO CORPORATIVO'), 'LAGHETTO_CORPORATIVO');
   assert.match(idDocMontagem('A|B/Ç ÃO&x'), /^[A-Za-z0-9_\-.~:@+]+$/);
+});
+
+/* ================= I3: alteradas só com campos de montagem; delta conferido ao carregar ================= */
+
+test('I3: alterada leva só id, organizacaoId e os grupos de CAMPOS_MONTAGEM que mudaram', () => {
+  const S = estado();
+  const sup = idDe(S, 'SUP'), coz = idDe(S, 'COZ1');
+  assert.equal(adicionarEmBloco(S, [coz], sup, 'RH', '2026-11-04').ok, true);
+  marcarLider(S, idDe(S, 'GAR1'), true);
+  const d = calcularDelta(S.atuacoesBase, S.atuacoes);
+  const permitidas = new Set(['id', 'organizacaoId', ...CAMPOS_MONTAGEM]);
+  for (const a of d.alteradas) assert.ok(Object.keys(a).every(k => permitidas.has(k)), JSON.stringify(a));
+  const aCoz = d.alteradas.find(a => a.id === coz), aGar = d.alteradas.find(a => a.id === idDe(S, 'GAR1'));
+  assert.deepEqual(Object.keys(aCoz).sort(), ['confirmadaPor', 'definidaEm', 'ehRaiz', 'id', 'metodoInferencia', 'organizacaoId', 'origem', 'superiorId'].sort());
+  assert.deepEqual(Object.keys(aGar).sort(), ['id', 'organizacaoId', 'podeLiderar']);
+  assert.ok(!('pessoaRef' in aCoz) && !('inicio' in aCoz) && !('turno' in aCoz) && !('funcao' in aCoz));
+  assert.deepEqual(GRUPOS_MONTAGEM.flat(), [...CAMPOS_MONTAGEM]);
+});
+
+test('I3: depois de uma carga nova, o delta antigo não sobrescreve função, setor e início que vieram da base', () => {
+  const S = estado();
+  const sup = idDe(S, 'SUP'), coz = idDe(S, 'COZ1'), gar = idDe(S, 'GAR1');
+  adicionarEmBloco(S, [coz], sup, 'RH', '2026-11-04');
+  definirCampoPessoa(S, 'GAR1', 'GOLDEN', 'funcao', 'FUNÇÃO EDITADA NA MATRIZ');
+  const d = JSON.parse(JSON.stringify(calcularDelta(S.atuacoesBase, S.atuacoes)));
+  /* carga nova: a base muda função, setor e início das duas atuações */
+  const nova = S.atuacoesBase.map(a => (a.id === coz || a.id === gar) ? { ...a, funcao: 'CARGO NOVO DA FOLHA', setor: 'SETOR NOVO', equipe: 'SETOR NOVO', inicio: '2026-10-01' } : a);
+  const r = aplicarDelta(nova, d);
+  const c = r.find(a => a.id === coz), g = r.find(a => a.id === gar);
+  assert.equal(c.superiorId, sup, 'a montagem vale');
+  assert.equal(c.confirmadaPor, 'RH');
+  assert.deepEqual([c.funcao, c.setor, c.inicio], ['CARGO NOVO DA FOLHA', 'SETOR NOVO', '2026-10-01'], 'o resto vem da base nova');
+  assert.equal(g.funcao, 'FUNÇÃO EDITADA NA MATRIZ', 'a função editada pelo RH continua valendo');
+  assert.deepEqual([g.setor, g.inicio], ['SETOR NOVO', '2026-10-01']);
+});
+
+test('I3: o vínculo vai inteiro: confirmar o inferido grava também o superior confirmado', () => {
+  const S = estado();
+  const cam = idDe(S, 'CAM');
+  assert.equal(confirmarInferido(S, cam, 'RH', '2026-11-04').ok, true);
+  const d = calcularDelta(S.atuacoesBase, S.atuacoes);
+  const a = d.alteradas.find(x => x.id === cam);
+  assert.equal(a.superiorId, idDe(S, 'SUP'), 'o superior que o RH viu e confirmou');
+  /* carga nova infere outro superior: a confirmação do RH não pode ser colada nele */
+  const nova = S.atuacoesBase.map(x => x.id === cam ? { ...x, superiorId: idDe(S, 'GG') } : x);
+  const r = aplicarDelta(nova, d).find(x => x.id === cam);
+  assert.equal(r.superiorId, idDe(S, 'SUP'));
+  assert.equal(r.origem, 'definido');
+});
+
+test('I3: aplicarDeltaConferido recusa delta com superior que não existe mais e não mexe nas atuações', () => {
+  const S = estado();
+  const sup = idDe(S, 'SUP'), coz = idDe(S, 'COZ1');
+  adicionarEmBloco(S, [coz], sup, 'RH', '2026-11-04');
+  const parte = deltaPorOrganizacao(calcularDelta(S.atuacoesBase, S.atuacoes)).GOLDEN;
+  /* carga nova sem a atuação do supervisor (saiu da empresa) */
+  const nova = S.atuacoesBase.filter(a => a.id !== sup && a.superiorId !== sup);
+  const r = aplicarDeltaConferido(nova, parte, 'GOLDEN');
+  assert.equal(r.ok, false);
+  assert.equal(r.codigo, 'superior_inexistente');
+  assert.equal(r.atuacoes, nova, 'devolve as atuações de entrada');
+  /* com a base de antes, o mesmo delta passa */
+  const ok = aplicarDeltaConferido(S.atuacoesBase, parte, 'GOLDEN');
+  assert.equal(ok.ok, true); assert.equal(ok.atuacoes.find(a => a.id === coz).superiorId, sup);
+  /* organização da carga sem raiz (BRANO) continua aceitando delta: o sem_raiz já existia antes */
+  const br = idDe(S, 'BR2', 'BRANO');
+  const sBr = { id: br, organizacaoId: 'BRANO', podeLiderar: true };
+  assert.equal(aplicarDeltaConferido(S.atuacoesBase, { versao: 2, alteradas: [sBr], criadas: [], removidasIds: [] }, 'BRANO').ok, true);
+  /* atuação de outra organização no documento: recusa */
+  assert.equal(aplicarDeltaConferido(S.atuacoesBase, { versao: 2, alteradas: [sBr], criadas: [], removidasIds: [] }, 'GOLDEN').codigo, 'atuacao_de_outra_organizacao');
+  /* alterada de atuação que a base nova não tem: ignorada e contada, não recusa */
+  const sem = aplicarDeltaConferido(S.atuacoesBase, { versao: 2, alteradas: [{ id: 'GOLDEN|NINGUEM|1', organizacaoId: 'GOLDEN', podeLiderar: true }], criadas: [], removidasIds: [] }, 'GOLDEN');
+  assert.equal(sem.ok, true); assert.deepEqual(sem.ignoradas, ['GOLDEN|NINGUEM|1']);
+});
+
+test('I3: documento versão 1 (registro inteiro em alteradas) ainda é lido como antes', () => {
+  const S = estado();
+  const coz = idDe(S, 'COZ1');
+  const inteiro = { ...S.atuacoesBase.find(a => a.id === coz), superiorId: idDe(S, 'SUP'), origem: 'definido', funcao: 'FUNÇÃO DO V1' };
+  const r = aplicarDelta(S.atuacoesBase, { versao: 1, alteradas: [inteiro], criadas: [], removidasIds: [] });
+  assert.deepEqual(r.find(a => a.id === coz), inteiro);
 });
 
 /* ================= dados reais (pula sem out/base.json) ================= */
@@ -193,7 +276,7 @@ test('dados reais: 50 operações no Golden, round-trip e documento do Golden ab
   }
   const d = calcularDelta(S.atuacoesBase, S.atuacoes);
   assert.deepEqual(porId(aplicarDelta(S.atuacoesBase, d)), porId(S.atuacoes));
-  const golden = deltaPorOrganizacao(d)[ORGANIZACAO_PILOTO] || { versao: 1, alteradas: [], criadas: [], removidasIds: [] };
+  const golden = deltaPorOrganizacao(d)[ORGANIZACAO_PILOTO] || { versao: VERSAO_DELTA, alteradas: [], criadas: [], removidasIds: [] };
   const doc = { organizacaoId: ORGANIZACAO_PILOTO, ...golden, idsUsados: golden.criadas.map(a => a.id), autor: 'RH', quando: new Date().toISOString() };
   const bytes = Buffer.byteLength(JSON.stringify(doc), 'utf8');
   console.log(`# GOLDEN: ${aplicadas} de 50 operações com efeito; ${golden.alteradas.length} alteradas, ${golden.criadas.length} criadas; documento ${bytes} bytes`);
@@ -283,7 +366,7 @@ test('página com banco vazio: montar grava um documento por organização; desf
   const g = setsMontagem(stub);
   assert.equal(g.length, 1, JSON.stringify(g.map(x => x.caminho)));
   assert.equal(g[0].caminho, 'montagem/GOLDEN');
-  assert.equal(g[0].d.organizacaoId, 'GOLDEN'); assert.equal(g[0].d.versao, 1);
+  assert.equal(g[0].d.organizacaoId, 'GOLDEN'); assert.equal(g[0].d.versao, 2);
   assert.deepEqual(g[0].d.alteradas.map(a => a.id), [...escolhidos].sort());
   assert.deepEqual(g[0].d.criadas, []); assert.deepEqual(g[0].d.removidasIds, []);
   assert.equal(g[0].d.autor, 'Teste RH'); assert.match(g[0].d.quando, /^\d{4}-\d{2}-\d{2}T/);
@@ -415,4 +498,24 @@ test('R26: sem banco os textos do Restaurar ficam como antes', async () => {
   assert.equal(b.textContent, 'Confirmar: descartar todas as alterações');
   b.click();
   assert.equal(document.querySelector('#lote-msg').textContent, 'Configuração voltou ao estado da importação.');
+});
+
+test('I3: página com delta que aponta para superior inexistente: recusa a organização, avisa na faixa e não regrava o documento', async () => {
+  const s0 = await deltaSemeado();
+  const doc = JSON.parse(JSON.stringify(s0.doc));
+  doc.versao = 2;
+  doc.alteradas = [{ id: s0.coz, organizacaoId: 'GOLDEN', superiorId: 'GOLDEN|QUEM-SAIU|1', ehRaiz: false, origem: 'definido', metodoInferencia: null, confirmadaPor: 'RH', definidaEm: '2026-11-01' }];
+  const stub = bancoFalso({ 'montagem/GOLDEN': doc });
+  const { window, document, S, erros } = await carregarPagina(base(), piloto(), stub, OPCOES);
+  await tick();
+  assert.equal(S.atuacoes.find(a => a.id === s0.coz).superiorId, null, 'o Golden ficou no estado da base');
+  assert.ok(!S.atuacoes.some(a => a.id === s0.criadaId), 'nem a criada do documento recusado entra');
+  assert.match(document.querySelector('#db-estado').textContent, /montagem salva de Golden não pôde ser aplicada \(superior_inexistente\)/);
+  /* mudar o Golden agora não sobrescreve o documento recusado */
+  await adicionarDoisAoSupervisor(window, document, S);
+  await tick();
+  assert.deepEqual(setsMontagem(stub), [], 'documento recusado fica intacto no banco');
+  assert.deepEqual(stub.docs['montagem/GOLDEN'], doc);
+  assert.equal(window.LGH_PERSISTENCIA.recusadas().GOLDEN, 'superior_inexistente');
+  assert.deepEqual(erros.map(String), []);
 });

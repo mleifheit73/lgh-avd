@@ -4091,6 +4091,9 @@ Regras:
 
   let db = null, pronto = false, ausente = false, fila = Promise.resolve();
   const ultimo = {};        /* organizacaoId -> JSON do que está no banco (lido ou gravado) */
+  /* I3: organização cuja montagem salva não pôde ser aplicada (árvore inválida sobre a base nova): o documento dela fica
+     intacto no banco, sem ser sobrescrito pelo estado da base, até o RH resolver; as mudanças nela ficam só em memória */
+  const recusadas = {};     /* organizacaoId -> codigo */
   const docDaOrg = {};      /* idDoc -> organizacaoId: duas organizações no mesmo documento são recusadas */
 
   /* ---- delta por organização, com os ids já usados (R16) que a base não recria sozinha ---- */
@@ -4103,7 +4106,7 @@ Regras:
     const orgs = new Set([...Object.keys(partes), ...Object.keys(usados), ...Object.keys(ultimo)]);
     const r = {};
     for(const org of orgs){
-      const d = partes[org] || {versao:1, alteradas:[], criadas:[], removidasIds:[]};
+      const d = partes[org] || {versao:P.VERSAO_DELTA, alteradas:[], criadas:[], removidasIds:[]};
       r[org] = {organizacaoId: org, versao: d.versao, alteradas: d.alteradas, criadas: d.criadas, removidasIds: d.removidasIds, idsUsados: (usados[org] || []).sort()};
     }
     return r;
@@ -4112,6 +4115,7 @@ Regras:
     if(!db || !pronto) return;
     const docs = documentos();
     for(const org of Object.keys(docs).sort()){
+      if(recusadas[org]) continue;
       const json = JSON.stringify(docs[org]);
       if(json === ultimo[org]) continue;
       if(!ultimo[org] && !docs[org].alteradas.length && !docs[org].criadas.length && !docs[org].removidasIds.length && !docs[org].idsUsados.length) continue;
@@ -4146,12 +4150,17 @@ Regras:
     catch(e){ clearTimeout(timer); db = null; mostrar('montagem: falha ao ler o banco (' + (e && e.code || 'erro') + '), fica só em memória'); return; }
     clearTimeout(timer);
     let atuacoes = S.atuacoes, n = 0;
+    const falhas = [], semBase = [];
     for(const d of (snap && snap.docs) || []){
       const x = d.data && d.data();
       if(!x || typeof x.organizacaoId !== 'string' || !Array.isArray(x.alteradas) || !Array.isArray(x.criadas)) continue;
       const delta = {versao: x.versao || 1, alteradas: x.alteradas, criadas: x.criadas, removidasIds: Array.isArray(x.removidasIds) ? x.removidasIds : []};
-      atuacoes = P.aplicarDelta(atuacoes, delta);
-      n += delta.alteradas.length + delta.criadas.length + delta.removidasIds.length;
+      /* I3: aplica e confere a árvore da organização; recusado, a organização fica no estado da base e a faixa avisa */
+      const r = P.aplicarDeltaConferido(atuacoes, delta, x.organizacaoId);
+      if(!r.ok){ recusadas[x.organizacaoId] = r.codigo; falhas.push(x.organizacaoId); docDaOrg[d.id || P.idDocMontagem(x.organizacaoId)] = x.organizacaoId; continue; }
+      if(r.ignoradas.length) semBase.push([x.organizacaoId, r.ignoradas.length]);
+      atuacoes = r.atuacoes;
+      n += delta.alteradas.length - r.ignoradas.length + delta.criadas.length + delta.removidasIds.length;
       const usados = LGH.idsUsados(S);
       for(const id of Array.isArray(x.idsUsados) ? x.idsUsados : []) usados.add(id);
       docDaOrg[d.id || P.idDocMontagem(x.organizacaoId)] = x.organizacaoId;
@@ -4161,7 +4170,10 @@ Regras:
     LGH.idsUsados(S);   /* R16: os ids das criadas também ficam reservados */
     pronto = true;
     reconstruirViews();
-    mostrar(n ? 'montagem: ' + plural(n, 'alteração carregada', 'alterações carregadas') : 'montagem: nenhuma alteração salva');
+    const nomeOrgPs = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
+    const avisos = falhas.map(o => `montagem salva de ${nomeOrgPs(o)} não pôde ser aplicada (${recusadas[o]}); o que mudar nela agora fica só em memória`)
+      .concat(semBase.map(([o, k]) => `${plural(k, 'alteração salva', 'alterações salvas')} de ${nomeOrgPs(o)} ${k===1?'se refere':'se referem'} a atuação que a base não tem mais`));
+    mostrar([n ? 'montagem: ' + plural(n, 'alteração carregada', 'alterações carregadas') : 'montagem: nenhuma alteração salva', ...avisos].join(' · '));
     if(n && S.perfil && S.tela && S.tela !== 'login') irPara(S.tela);
   }
   document.addEventListener('lgh-db-pronto', ()=>aposBoot(carregar));
@@ -4174,7 +4186,7 @@ Regras:
     if(S.confirmaRestaurar){ if(b) b.textContent = 'Confirmar: descartar as alterações e apagar a montagem salva no banco'; }
     else if(msg) msg.textContent = 'Configuração voltou ao estado da importação; a montagem salva no banco foi apagada.';
   });
-  window.LGH_PERSISTENCIA = { sincronizar, documentos, pronto: () => pronto, versao: 1 };
+  window.LGH_PERSISTENCIA = { sincronizar, documentos, pronto: () => pronto, versao: P.VERSAO_DELTA, recusadas: () => ({...recusadas}) };
 })();
 </script>
 
