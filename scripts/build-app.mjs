@@ -1,6 +1,6 @@
 /**
  * Build do artefato (Plano B).
- *  1. copia src/carga/*.js e src/modelo/atuacao.js para app/js/ (sem alteração);
+ *  1. copia src/carga/*.js e src/modelo/atuacao.js para app/js/ (sem alteração) e gera app/js/lgh.bundle.js (build-bundle.mjs);
  *  2. gera app/data/base.json (base pública: sem CPF, sem nascimento, sem idade) a partir de out/base.json;
  *  3. extrai app/data/piloto-golden.json do array PESSOAS de prototipo/index.html;
  *  4. monta dist/ como cópia de app/;
@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { gerarBundle } from './build-bundle.mjs';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (...p) => path.join(raiz, ...p);
@@ -142,11 +143,8 @@ function copiarArvore(origem, destino) {
 }
 
 function principal() {
-  // 1. módulos do Plano A, sem alteração
-  fs.mkdirSync(rel('app/js/carga'), { recursive: true });
-  fs.mkdirSync(rel('app/js/modelo'), { recursive: true });
-  for (const f of fs.readdirSync(rel('src/carga')).filter((x) => x.endsWith('.js'))) fs.copyFileSync(rel('src/carga', f), rel('app/js/carga', f));
-  fs.copyFileSync(rel('src/modelo/atuacao.js'), rel('app/js/modelo/atuacao.js'));
+  // 1. módulos do Plano A, sem alteração, e o bundle do navegador
+  gerarBundle();
 
   fs.mkdirSync(rel('app/data'), { recursive: true });
 

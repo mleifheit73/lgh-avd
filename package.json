@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "pretest": "node scripts/build-bundle.mjs",
     "test": "node --test",
+    "build:bundle": "node scripts/build-bundle.mjs",
     "carga": "node src/cli/carga.js",
     "build:app": "node scripts/build-app.mjs"
   },
@@ -12,6 +14,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "jsdom": "^25.0.1"
   }
 }

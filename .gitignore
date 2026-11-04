@@ -10,3 +10,6 @@ app/data/
 app/js/carga/
 app/js/modelo/atuacao.js
 dist/
+
+# Bundle do navegador (Plano B, Tarefa 3): gerado por npm run build:bundle
+app/js/lgh.bundle.js
