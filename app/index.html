@@ -3912,6 +3912,47 @@ Regras:
 })();
 </script>
 
+<style id="bloco-trava-css">
+#ci-lista .tr-motivo{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:.82rem;color:var(--crit);
+  background:var(--crit-soft);border-left:3px solid var(--crit);border-radius:0 8px 8px 0;padding:6px 10px;align-self:center;max-width:60ch}
+#ci-lista .tr-motivo b{font-weight:600}
+#ci-lista .tr-motivo .linkish{color:inherit}
+</style>
+<script id="bloco-trava">
+(function(){
+  if(typeof LGH === 'undefined' || !LGH.montagem || typeof LGH.montagem.podeAbrirCiclo !== 'function' || typeof renderCiclos !== 'function') return;
+  /* Spec 7.4: o ciclo só abre com hierarquia completa. O calendário de ciclos é um só para a rede, então a trava olha a
+     organização selecionada no topo e o texto diz qual é. As decisões da v34 (abrir, encerrar, excluir) não mudam. */
+  const nomeOrg = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
+  function aplicarTrava(){
+    const botoes = [...document.querySelectorAll('#ci-lista [data-abrir]')];
+    if(!botoes.length) return;
+    const org = S.organizacaoSelecionada;
+    const r = org ? LGH.montagem.podeAbrirCiclo(S, org) : {pode:false, motivo:'nenhuma organização selecionada', codigo:null};
+    if(r.pode) return;
+    const verPend = !!window.LGH_PENDENCIAS && pode('verPainelRH');
+    botoes.forEach((b, k)=>{
+      b.disabled = true; b.onclick = null;
+      const msg = document.createElement('span');
+      msg.className = 'tr-motivo'; msg.id = 'tr-motivo-' + k; msg.setAttribute('role', 'status');
+      msg.dataset.codigo = r.codigo || '';
+      msg.innerHTML = `<span>Não dá para abrir o ciclo: <b>${esc(r.motivo)}</b> em ${esc(org ? nomeOrg(org) : 'nenhuma organização')}.</span>`
+        + (verPend ? `<button type="button" class="linkish" data-ver-pendencias>Ver pendências</button>` : '');
+      b.setAttribute('aria-describedby', msg.id);
+      b.insertAdjacentElement('afterend', msg);
+    });
+  }
+  const renderCiclosOriginalTr = renderCiclos;
+  renderCiclos = function(){ const r = renderCiclosOriginalTr.apply(this, arguments); aplicarTrava(); return r; };
+  const lista = document.querySelector('#ci-lista');
+  if(lista) lista.addEventListener('click', e=>{
+    if(!(e.target instanceof Element) || !e.target.closest('[data-ver-pendencias]')) return;
+    irPara('pendencias');
+  });
+  window.LGH_TRAVA = { aplicar: aplicarTrava };
+})();
+</script>
+
 
 
 

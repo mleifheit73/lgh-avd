@@ -8,6 +8,7 @@
  * Leitura sai de S.atuacoes, S.semOrganizacao e S.base (fonte única).
  */
 import { ID_CORPORATIVO } from './organizacao.js';
+import { filaDePendencias, TRAVAM_CICLO } from './pendencias.js';
 import {
   ehCorrente, nomeExibicao, vinculoDaAtuacao, SEM_SETOR, definirSuperior, removerSuperior,
   marcarLider as marcarLiderAdaptador, confirmarInferido as confirmarInferidoAdaptador,
@@ -189,4 +190,38 @@ export function adicionarNaRede(S, chaves, superiorAtuacaoId, autor, quando = ho
   }
   const ok = aplicados.length > 0 || recusados.length === 0;
   return ok ? { ok, aplicados, recusados } : { ok, codigo: recusados[0].codigo, aplicados, recusados };
+}
+
+/* ---------- trava de abertura de ciclo (Tarefa 7, spec 7.4) ---------- */
+
+/**
+ * Pode abrir o ciclo desta organização? Lê da fila de pendências (fonte única): a trava e a tela Pendências nunca divergem.
+ * Motivos, o primeiro que valer: organização sem raiz; raiz sem ligação à estrutura corporativa (só tipo unidade, D20);
+ * pessoas sem líder; avaliação mútua; árvore inválida (código de validarArvore). Vínculo inferido ainda não confirmado
+ * e pendência de carga NÃO travam: pedem conferência, mas há líder e a árvore é válida.
+ * Devolve { pode, motivo, codigo }; codigo é o código da pendência que travou. Não escreve em S.
+ */
+export function podeAbrirCiclo(S, organizacaoId) {
+  if (!(S.organizacoes || []).some(o => o.id === organizacaoId)) {
+    return { pode: false, motivo: 'organização não encontrada', codigo: 'organizacao_inexistente' };
+  }
+  const travas = filaDePendencias(S, organizacaoId).filter(i => TRAVAM_CICLO.includes(i.codigo));
+  const de = codigo => travas.filter(i => i.codigo === codigo);
+  const nega = (motivo, codigo) => ({ pode: false, motivo, codigo });
+
+  if (de('organizacao_sem_raiz').length) return nega('organização sem raiz definida', 'organizacao_sem_raiz');
+  if (de('raiz_sem_ligacao_corporativa').length) return nega('raiz sem ligação à estrutura corporativa', 'raiz_sem_ligacao_corporativa');
+  const semLider = de('sem_superior');
+  if (semLider.length) {
+    const pessoas = new Set(semLider.map(i => i.pessoaId)).size;
+    const motivo = pessoas === semLider.length
+      ? `${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'} sem líder definido`
+      : `${semLider.length} atuações sem líder definido (${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'})`;
+    return nega(motivo, 'sem_superior');
+  }
+  const mutuas = de('avaliacao_mutua');
+  if (mutuas.length) return nega(`avaliação mútua entre ${mutuas[0].detalhe}${mutuas.length > 1 ? ` (e mais ${mutuas.length - 1})` : ''}`, 'avaliacao_mutua');
+  const invalidos = de('vinculo_invalido');
+  if (invalidos.length) return nega(`árvore inválida: ${invalidos[0].detalhe || 'arvore_invalida'}`, 'vinculo_invalido');
+  return { pode: true, motivo: null, codigo: null };
 }
