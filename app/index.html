@@ -2361,7 +2361,8 @@ boot().catch(e=>{ S.erroBoot = String(e&&e.message||e); console.error('Falha no 
         ENVIADAS[dados.chave] = dados.versoes; ultimo[dados.chave] = JSON.stringify(dados.versoes); n++;
         if(S.idsUsados) S.idsUsados.add(dados.chave.slice(0, dados.chave.lastIndexOf('|'))); }   /* R16: id de atuação avaliada nunca é reusado */
       pronto = true;
-      window.LGH_DB = db; document.dispatchEvent(new CustomEvent('lgh-db-pronto'));
+      window.LGH_DB = db; window.LGH_DB_SINCRONIZAR = sincronizar;   /* v38: blocos que gravam dentro de ENVIADAS pedem a sincronização */
+      document.dispatchEvent(new CustomEvent('lgh-db-pronto'));
       estado('ok', n ? n + (n===1 ? ' avaliação salva' : ' avaliações salvas') + ' no banco do artefato. Recarregar a página não apaga.' : 'Banco do artefato conectado. Nenhuma avaliação salva ainda.');
       rerender();
     }catch(e){ clearTimeout(timer); estado('erro', 'Falha ao ler o banco do artefato (' + (e && e.code || 'erro') + '). Avaliações ficam só em memória nesta sessão.'); }
@@ -4411,5 +4412,151 @@ Regras:
     });
     return r;
   };
+})();
+</script>
+
+<!-- ===== BLOCO DEVOLUTIVA (v38, 05/11/2026, pedidos de Marcelo na reunião de 04/11): o parecer por IA é gravado no
+     registro da avaliação enviada (devolutiva.pareceres: versão, texto, autor, data e hora, rótulo de IA); ao abrir o
+     Relatório ele carrega sozinho e o botão "Gerar" some; novo parecer só com autorização do RH (recurso "reabrir"),
+     com motivo, e o anterior fica como versão anterior. Campo "Registro da devolutiva" do líder, opcional, imutável
+     depois de salvo, acrescentável (devolutiva.registros). Tudo aparece no Histórico do Formulário e na gaveta do
+     Painel do avaliador. Persistência: o registro vive dentro de ENVIADAS, que o bloco-db já grava. ===== -->
+<style id="bloco-devolutiva-css">
+#rel-parecer-meta{font-size:.78rem;color:var(--muted);margin:8px 0 0}
+#rel-novo-parecer{margin-top:10px}
+#rel-registro{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+#rel-registro h4{margin:0 0 4px;font-size:.92rem}
+#rel-registro .dica{font-size:.8rem;color:var(--muted);margin:0 0 8px}
+#rel-registros{display:grid;gap:8px;margin:0 0 10px}
+.rel-reg{padding:9px 11px;border-left:3px solid var(--accent);background:var(--surface-2);border-radius:0 8px 8px 0;font-size:.86rem;white-space:pre-wrap}
+.rel-reg .meta{display:block;font-size:.75rem;color:var(--muted);margin-top:4px}
+#rel-registro-texto{width:100%;min-height:76px;font:inherit;font-size:.88rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+.dev-hist{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--surface-2);font-size:.8rem}
+.dev-hist b{display:block;margin-bottom:3px}
+.dev-hist .meta{color:var(--muted);font-size:.75rem}
+.dev-hist .txt{white-space:pre-wrap;margin:4px 0 6px}
+</style>
+<script id="bloco-devolutiva">
+(function(){
+  if(typeof renderRelatorio !== 'function' || typeof chaveAval !== 'function' || typeof ENVIADAS === 'undefined') return;
+  const quem = () => S.perfil ? S.perfil.nome : 'Avaliador';
+  const registroAtual = () => { const l = ENVIADAS[chaveAval()]; return l && l.length ? l[l.length-1] : null; };
+  const devDe = reg => { if(!reg) return null; if(!reg.devolutiva) reg.devolutiva = { pareceres: [], registros: [] }; reg.devolutiva.pareceres ||= []; reg.devolutiva.registros ||= []; return reg.devolutiva; };
+  const persistir = () => { if(typeof window.LGH_DB_SINCRONIZAR === 'function') window.LGH_DB_SINCRONIZAR(); };
+  const ultimoParecer = reg => { const d = reg && reg.devolutiva; return d && d.pareceres && d.pareceres.length ? d.pareceres[d.pareceres.length-1] : null; };
+  const podeRegistrar = () => !!S.perfil && (S.perfil.papel === 'avaliador' || pode('reabrir'));
+  let novoAutorizado = null;   /* { motivo, por } enquanto o RH autoriza um novo parecer nesta tela */
+
+  /* ---- Relatório: parecer carregado, botão escondido, novo parecer só pelo RH, registro da devolutiva ---- */
+  const renderOriginalDev = renderRelatorio;
+  renderRelatorio = function(){
+    const r = renderOriginalDev.apply(this, arguments);
+    const reg = S.colab && S.salvo ? registroAtual() : null;
+    const gerar = document.querySelector('#rel-gerar'), texto = document.querySelector('#rel-texto'), tag = document.querySelector('#rel-tag');
+    let meta = document.querySelector('#rel-parecer-meta');
+    if(!meta && texto){ meta = document.createElement('p'); meta.id = 'rel-parecer-meta'; texto.insertAdjacentElement('afterend', meta); }
+    let btnNovo = document.querySelector('#rel-novo-parecer'); if(btnNovo) btnNovo.remove();
+    const par = ultimoParecer(reg);
+    if(par && !novoAutorizado){
+      S.relatorio = par.texto; if(texto) texto.textContent = par.texto; if(tag) tag.hidden = false;
+      if(gerar) gerar.hidden = true;
+      if(meta){ meta.hidden = false; meta.textContent = `Gerado por IA em ${par.em} por ${par.por}${par.versao > 1 ? ` · versão ${par.versao}${par.motivo ? ` (novo parecer autorizado por ${par.autorizadoPor || 'RH'}: ${par.motivo})` : ''}` : ''}. Registro imutável.`; }
+      if(pode('reabrir') && gerar){
+        btnNovo = document.createElement('button'); btnNovo.type = 'button'; btnNovo.className = 'btn sec'; btnNovo.id = 'rel-novo-parecer';
+        btnNovo.textContent = 'Autorizar novo parecer (RH)';
+        btnNovo.onclick = ()=>{
+          const motivo = (window.prompt('Motivo para gerar um novo parecer (fica registrado no histórico):') || '').trim();
+          if(!motivo) return;
+          novoAutorizado = { motivo, por: quem() };
+          renderRelatorio();
+        };
+        gerar.insertAdjacentElement('afterend', btnNovo);
+      }
+    } else {
+      if(gerar) gerar.hidden = !reg;
+      if(meta){ meta.hidden = !novoAutorizado; if(novoAutorizado) meta.textContent = `Novo parecer autorizado por ${novoAutorizado.por}: ${novoAutorizado.motivo}. O parecer anterior continua no histórico.`; }
+      if(novoAutorizado && texto){ texto.textContent = ''; S.relatorio = ''; if(tag) tag.hidden = true; }
+    }
+    pintarRegistro(reg);
+    return r;
+  };
+  /* o clique em Gerar: depois do original, grava o parecer no registro */
+  const gerarBtn = document.querySelector('#rel-gerar');
+  if(gerarBtn && typeof gerarBtn.onclick === 'function'){
+    const originalGerar = gerarBtn.onclick;
+    gerarBtn.onclick = async function(ev){
+      const reg = registroAtual();
+      const antes = S.relatorio;
+      await originalGerar.call(this, ev);
+      const textoGerado = (S.relatorio || '').trim();
+      if(!reg || !textoGerado || textoGerado === antes) return;
+      const d = devDe(reg);
+      const item = { versao: d.pareceres.length + 1, texto: textoGerado, por: quem(), em: agora(), geradoPorIA: true };
+      if(novoAutorizado){ item.motivo = novoAutorizado.motivo; item.autorizadoPor = novoAutorizado.por; novoAutorizado = null; }
+      d.pareceres.push(item);
+      persistir();
+      renderRelatorio();
+    };
+  }
+  /* registro da devolutiva */
+  function pintarRegistro(reg){
+    const card = document.querySelector('#rel-texto') && document.querySelector('#rel-texto').closest('.card');
+    if(!card) return;
+    let sec = document.querySelector('#rel-registro');
+    if(!reg){ if(sec) sec.remove(); return; }
+    if(!sec){ sec = document.createElement('div'); sec.id = 'rel-registro'; card.appendChild(sec); }
+    const d = devDe(reg);
+    const lista = d.registros.map(x => `<div class="rel-reg">${esc(x.texto)}<span class="meta">${esc(x.por)} · ${esc(x.em)}</span></div>`).join('');
+    const rascunho = S.relRegistroRascunho || '';
+    sec.innerHTML = `<h4>Registro da devolutiva</h4>
+      <p class="dica">O que aconteceu na conversa com o colaborador: acordos, reações, pedidos. Não é obrigatório. Depois de salvo, o registro não muda; para complementar, acrescente outro.</p>
+      <div id="rel-registros">${lista || '<p class="dica" style="margin:0">Nenhum registro ainda.</p>'}</div>
+      ${podeRegistrar() ? `<textarea id="rel-registro-texto" placeholder="Escreva aqui o registro desta devolutiva">${esc(rascunho)}</textarea>
+      <div class="row" style="margin-top:8px;gap:10px;align-items:center"><button type="button" class="btn sec" id="rel-registro-salvar" ${rascunho.trim() ? '' : 'disabled'}>Salvar registro</button><span id="rel-registro-msg" style="font-size:.8rem;color:var(--muted)"></span></div>` : ''}`;
+    const ta = sec.querySelector('#rel-registro-texto'), btn = sec.querySelector('#rel-registro-salvar');
+    if(ta && btn){
+      ta.oninput = ()=>{ S.relRegistroRascunho = ta.value; btn.disabled = !ta.value.trim(); };
+      btn.onclick = ()=>{
+        const t = (ta.value || '').trim(); if(!t) return;
+        d.registros.push({ texto: t, por: quem(), em: agora() });
+        S.relRegistroRascunho = '';
+        persistir();
+        pintarRegistro(reg);
+        const msg = sec.querySelector('#rel-registro-msg'); if(msg) msg.textContent = 'Registro salvo.';
+      };
+    }
+  }
+
+  /* ---- Histórico do Formulário: pareceres e registros por versão ---- */
+  const htmlDev = (ver) => {
+    const d = ver && ver.devolutiva; if(!d || (!(d.pareceres||[]).length && !(d.registros||[]).length)) return '';
+    return (d.pareceres||[]).map(p => `<div class="dev-hist"><b>Parecer por IA · versão ${p.versao}</b><span class="meta">${esc(p.em)} · gerado por ${esc(p.por)}${p.motivo ? ` · novo parecer autorizado por ${esc(p.autorizadoPor||'RH')}: ${esc(p.motivo)}` : ''}</span><div class="txt">${esc(p.texto)}</div></div>`).join('')
+      + (d.registros||[]).map(x => `<div class="dev-hist"><b>Registro da devolutiva</b><span class="meta">${esc(x.em)} · ${esc(x.por)}</span><div class="txt">${esc(x.texto)}</div></div>`).join('');
+  };
+  if(typeof pintarHistorico === 'function'){
+    const histOriginal = pintarHistorico;
+    pintarHistorico = function(){
+      const r = histOriginal.apply(this, arguments);
+      const v = versoes(); const caixas = document.querySelectorAll('#fm-versoes .versao');
+      /* a tela lista as versões da mais nova para a mais antiga */
+      caixas.forEach((caixa, i) => { const ver = v[v.length - 1 - i]; const h = htmlDev(ver); if(h) caixa.insertAdjacentHTML('beforeend', h); });
+      return r;
+    };
+  }
+  /* ---- gaveta do Painel do avaliador: observa o corpo e acrescenta por item ---- */
+  const corpo = document.querySelector('#av2-dr-corpo'), dr = document.querySelector('#av2-drawer');
+  if(corpo && dr && typeof MutationObserver !== 'undefined'){
+    let aplicando = false;
+    new MutationObserver(()=>{
+      if(aplicando) return; aplicando = true;
+      try{
+        const id = dr.dataset.atuacao; if(!id) return;
+        const envios = []; ['colab','lider'].forEach(t => (ENVIADAS[id+'|'+t]||[]).forEach(v => envios.push(v)));
+        envios.sort((a,b)=>(b.versao||0)-(a.versao||0));
+        corpo.querySelectorAll('.av2-item').forEach((item, i) => { if(item.querySelector('.dev-hist')) return; const h = htmlDev(envios[i]); if(h) item.insertAdjacentHTML('beforeend', h); });
+      } finally { aplicando = false; }
+    }).observe(corpo, {childList:true});
+  }
+  window.LGH_DEVOLUTIVA = { registroAtual, ultimoParecer };
 })();
 </script>
