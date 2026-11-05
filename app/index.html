@@ -417,7 +417,7 @@ td .sub{font-size:.74rem;color:var(--muted);margin-top:2px}
     <div class="row" style="margin-top:12px;gap:18px;font-size:.85rem;color:var(--muted)">
       <span>Avaliador: <b id="fm-aval" style="color:var(--fg)"></b></span>
       <span>Unidade: <b style="color:var(--fg)" id="fm-unidade"></b></span>
-      <span>Data: <b style="color:var(--fg)">22/10/2026</b></span>
+      <span>Data: <b style="color:var(--fg)" id="fm-data">22/10/2026</b></span>
     </div>
   </div>
   <div class="legenda-nota">
@@ -1711,14 +1711,15 @@ function salvarAvaliacao(){
   document.querySelectorAll('.crit.faltou').forEach(el=>el.classList.remove('faltou'));
   const al = $('#fm-alerta');
   if(falt.length){
-    falt.forEach(f=>{ const el=$('#c-'+f.k); if(el) el.classList.add('faltou'); });
+    /* v37: ids como c-4.2 não são seletor CSS válido; no navegador $('#c-4.2') lançava erro e nenhuma mensagem aparecia */
+    falt.forEach(f=>{ const el=document.getElementById('c-'+f.k); if(el) el.classList.add('faltou'); });
     const nN = falt.filter(f=>f.semNota).length, nO = falt.filter(f=>f.semObs).length;
     const partes=[];
     if(nN) partes.push(`${nN} ${nN===1?'nota':'notas'}`);
     if(nO) partes.push(`${nO} ${nO===1?'observação':'observações'}`);
     al.className='alerta-val'; al.hidden=false;
     al.textContent = `A avaliação não foi salva. Faltam ${partes.join(' e ')}. Os campos pendentes estão marcados em vermelho, com asterisco.`;
-    const primeiro = $('#c-'+falt[0].k);
+    const primeiro = document.getElementById('c-'+falt[0].k);
     if(primeiro) primeiro.scrollIntoView({behavior:'smooth', block:'center'});
     S.salvo=false; $('#fm-ir').disabled=true;
     return false;
@@ -4281,5 +4282,134 @@ Regras:
   document.addEventListener('lgh-db-pronto', conferir);
   if(window.LGH_DB) conferir();
   window.LGH_VERSAO = { conferir };
+})();
+</script>
+
+<!-- ===== BLOCO V37 FORMULÁRIO (05/11/2026, pedidos de Marcelo na reunião de 04/11): (1) o erro de envio aparece também
+     junto do botão Enviar, com o número dos critérios que faltam; (2) a caixa "Ferramentas de protótipo" nunca fica
+     visível vazia; (3) a data do cabeçalho é a de hoje (a cravada "22/10/2026" vinha da v26) com explicação.
+     Bloco independente: só embrulha salvarAvaliacao, renderForm e pintarProto. ===== -->
+<style id="bloco-v37-form-css">
+#fm-alerta-rodape{margin:10px 0 0}
+#fm-alerta-rodape[hidden]{display:none}
+.fm-data-wrap{position:relative;display:inline-flex;align-items:center;gap:6px}
+#fm-data-ajuda{width:18px;height:18px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:.72rem;font-weight:700;line-height:1;cursor:pointer;padding:0}
+#fm-data-ajuda:hover{border-color:var(--accent);color:var(--accent-ink)}
+#fm-data-pop{position:absolute;top:24px;right:0;z-index:5;width:min(320px,80vw);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.82rem;color:var(--fg);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+#fm-data-pop[hidden]{display:none}
+#fm-data-pop b{display:block;margin-bottom:4px}
+</style>
+<script id="bloco-v37-form">
+(function(){
+  if(typeof salvarAvaliacao !== 'function' || typeof renderForm !== 'function' || typeof faltantes !== 'function') return;
+  const hojeBR = () => { const d = new Date(); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+  /* (3) data de preenchimento: hoje, com explicação */
+  function pintarData(){
+    const b = document.querySelector('#fm-data'); if(!b) return;
+    b.textContent = hojeBR();
+    if(b.parentElement && !b.parentElement.querySelector('#fm-data-ajuda')){
+      const span = b.parentElement;
+      span.classList.add('fm-data-wrap');
+      const btn = document.createElement('button'); btn.type = 'button'; btn.id = 'fm-data-ajuda'; btn.textContent = '?';
+      btn.setAttribute('aria-label', 'O que é esta data'); btn.title = 'O que é esta data';
+      const pop = document.createElement('div'); pop.id = 'fm-data-pop'; pop.hidden = true; pop.setAttribute('role','dialog');
+      pop.innerHTML = '<b>Data de preenchimento</b>O dia em que esta avaliação está sendo feita. Ao enviar, a avaliação fica registrada com data e hora do envio, que é a que vale no histórico.';
+      btn.onclick = (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; };
+      document.addEventListener('click', (e) => { if(!pop.hidden && !(e.target instanceof Element && e.target.closest('.fm-data-wrap'))) pop.hidden = true; });
+      span.appendChild(btn); span.appendChild(pop);
+    }
+  }
+  /* (1) erro de envio junto do botão */
+  function rodape(){
+    let r = document.querySelector('#fm-alerta-rodape');
+    if(!r){ r = document.createElement('p'); r.id = 'fm-alerta-rodape'; r.className = 'alerta-val'; r.hidden = true;
+      const total = document.querySelector('#t-form .total'); if(total) total.insertAdjacentElement('afterend', r); }
+    return r;
+  }
+  const rotulos = (falt) => {
+    const idx = {}; let n = 0;
+    FORMS[S.tipo].pilares.forEach((pi,i)=>pi.c.forEach((c,j)=>{ n++; idx[i+'.'+j] = n; }));
+    const notas = falt.filter(f=>f.semNota).map(f=>idx[f.k]), obs = falt.filter(f=>f.semObs).map(f=>idx[f.k]);
+    const lista = (nums, um, varios) => nums.length ? `${nums.length===1?um:varios} ${nums.join(', ')}` : '';
+    return [lista(notas,'nota do critério','notas dos critérios'), lista(obs,'observação do critério','observações dos critérios')].filter(Boolean).join(' e ');
+  };
+  const salvarOriginal37 = salvarAvaliacao;
+  salvarAvaliacao = function(){
+    const falt = faltantes();
+    const r = salvarOriginal37.apply(this, arguments);
+    const rod = rodape(), topo = document.querySelector('#fm-alerta');
+    if(falt.length && topo && !topo.hidden){
+      topo.textContent = `A avaliação não foi salva. Falta: ${rotulos(falt)}. Os campos pendentes estão marcados em vermelho, com asterisco.`;
+      rod.textContent = topo.textContent; rod.className = 'alerta-val'; rod.hidden = false;
+    } else { rod.hidden = true; }
+    return r;
+  };
+  /* o botão foi ligado à função original na v26 (onclick = salvarAvaliacao), antes dos blocos embrulharem a função;
+     religar com chamada tardia faz todos os embrulhos valerem no clique */
+  const btnEnviar = document.querySelector('#fm-salvar'); if(btnEnviar) btnEnviar.onclick = () => salvarAvaliacao();
+  const renderOriginal37 = renderForm;
+  renderForm = function(){
+    const r = renderOriginal37.apply(this, arguments); pintarData();
+    const rod = document.querySelector('#fm-alerta-rodape'); if(rod) rod.hidden = true;
+    /* o bloco-fix reexibe todos os filhos da seção ao fixar o colaborador; caixas vazias voltam a ficar escondidas */
+    for(const id of ['#fm-proto', '#fm-alerta']){ const el = document.querySelector(id); if(el && !el.hidden && !el.textContent.trim()) el.hidden = true; }
+    return r;
+  };
+  /* (2) caixa de protótipo nunca vazia */
+  const pintarProtoOriginal37 = pintarProto;
+  pintarProto = function(){ const r = pintarProtoOriginal37.apply(this, arguments); const el = document.querySelector('#fm-proto'); if(el && !el.hidden && !el.textContent.trim()) el.hidden = true; return r; };
+  const protoEl = document.querySelector('#fm-proto'); if(protoEl && !protoEl.textContent.trim()) protoEl.hidden = true;
+  /* botões de confirmação de envio e limpeza mudam o alerta do topo por fora: espelhar o rodapé quando o topo esconde */
+  const topoEl = document.querySelector('#fm-alerta');
+  if(topoEl && typeof MutationObserver !== 'undefined'){
+    new MutationObserver(()=>{ const rod = document.querySelector('#fm-alerta-rodape'); if(rod && topoEl.hidden) rod.hidden = true; }).observe(topoEl, {attributes:true, attributeFilter:['hidden']});
+  }
+})();
+</script>
+
+<!-- ===== BLOCO V37 PAINEL PARA O RH (05/11/2026): o Painel do avaliador aberto por RH (unidade, regional, holding) deixa
+     de dizer "Você não tem equipes atribuídas" e mostra todas as atuações da organização selecionada, agrupadas por
+     equipe (setor), com o avaliador de cada linha e sem botão Avaliar (o RH não preenche). A visão por ciclo e a gaveta
+     (bloco-av2) seguem a mesma lista. Para o avaliador nada muda. Bloco independente: embrulha itensDoAvaliador e
+     renderAvaliador. ===== -->
+<style id="bloco-v37-painel-css">
+#av-equipes td.av-avaliador{font-size:.8rem;color:var(--muted)}
+#av-equipes td.av-avaliador.sem{color:var(--crit);font-weight:600}
+</style>
+<script id="bloco-v37-painel">
+(function(){
+  if(typeof itensDoAvaliador !== 'function' || typeof renderAvaliador !== 'function') return;
+  const PAPEIS_RH = ['rh_unidade','rh_regional','admin'];
+  const ehRH = () => !!(S.perfil && PAPEIS_RH.includes(S.perfil.papel));
+  const itensOriginal37 = itensDoAvaliador;
+  itensDoAvaliador = function(){
+    if(!ehRH() || !S.organizacaoSelecionada) return itensOriginal37.apply(this, arguments);
+    /* uma linha por atuação corrente da organização, como o Painel do RH conta */
+    return LGH.atuacoesVisiveis(S).map(a=>LGH.colabDe(S, a)).filter(Boolean)
+      .sort((x,y)=>x.nome.localeCompare(y.nome,'pt-BR'));
+  };
+  const renderOriginal37 = renderAvaliador;
+  renderAvaliador = function(){
+    const r = renderOriginal37.apply(this, arguments);
+    if(!ehRH() || !S.perfil) return r;
+    const org = nomeOrganizacao();
+    const t = document.querySelector('#av-titulo'), sub = document.querySelector('#av-sub');
+    if(t) t.textContent = `Avaliações de ${org}`;
+    if(sub) sub.textContent = `Visão do RH: todas as atuações de ${org}, por equipe, com o avaliador de cada uma. Clique no nome para ver o histórico.`;
+    const prazo = document.querySelector('#av-prazo'); if(prazo) prazo.innerHTML = prazo.innerHTML.replace('Você tem ', `${org} tem `);
+    document.querySelectorAll('#av-equipes p').forEach(pEl => { if(/Avaliação dividida com/.test(pEl.textContent)) pEl.remove(); });
+    const itens = itensDoAvaliador(); const porAtuacao = new Map(itens.map(p=>[p.atuacaoId, p]));
+    document.querySelectorAll('#av-equipes button[data-abrir]').forEach(b=>{
+      const p = porAtuacao.get(b.dataset.abrir);
+      const tr = b.closest('tr');
+      const tdBtn = b.closest('td');
+      const tdId = tr ? tr.children[1] : null;
+      if(tdId){ const av = p && p.avaliadores && p.avaliadores.length ? p.avaliadores.join(', ') : 'sem avaliador';
+        tdId.className = 'av-avaliador' + (av === 'sem avaliador' ? ' sem' : ''); tdId.textContent = av; }
+      if(tdBtn) tdBtn.textContent = '';
+      b.remove();
+    });
+    return r;
+  };
 })();
 </script>
