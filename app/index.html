@@ -4310,6 +4310,7 @@ Regras:
      visível vazia; (3) a data do cabeçalho é a de hoje (a cravada "22/10/2026" vinha da v26) com explicação.
      Bloco independente: só embrulha salvarAvaliacao, renderForm e pintarProto. ===== -->
 <style id="bloco-v37-form-css">
+#fm-selo[hidden]{display:none}  /* v42: .selo usa display:flex, que vencia o atributo hidden */
 #fm-alerta-rodape{margin:10px 0 0}
 #fm-alerta-rodape[hidden]{display:none}
 .fm-data-wrap{position:relative;display:inline-flex;align-items:center;gap:6px}
@@ -4372,7 +4373,7 @@ Regras:
     const r = renderOriginal37.apply(this, arguments); pintarData();
     const rod = document.querySelector('#fm-alerta-rodape'); if(rod) rod.hidden = true;
     /* o bloco-fix reexibe todos os filhos da seção ao fixar o colaborador; caixas vazias voltam a ficar escondidas */
-    for(const id of ['#fm-proto', '#fm-alerta']){ const el = document.querySelector(id); if(el && !el.hidden && !el.textContent.trim()) el.hidden = true; }
+    for(const id of ['#fm-proto', '#fm-alerta', '#fm-selo']){ const el = document.querySelector(id); if(el && !el.hidden && !el.textContent.trim()) el.hidden = true; }   /* v42: #fm-selo vazio também */
     return r;
   };
   /* (2) caixa de protótipo nunca vazia */

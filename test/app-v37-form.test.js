@@ -68,3 +68,20 @@ test('v37: a data do cabeçalho é a de hoje e tem explicação', async () => {
   assert.match(pop.textContent, /Data de preenchimento/);
   assert.match(pop.textContent, /data e hora do envio/);
 });
+
+test('v42: a faixa do selo (#fm-selo) não aparece vazia antes do envio; depois do envio aparece com conteúdo', async () => {
+  const { window, document, erros } = await carregarPagina(lerFixture('base-mini.json'), lerFixture('piloto-mini.json'), null, { fusoes: [{ id: 'GOLDEN', nome: 'Golden', filiais: ['GOLDEN A&B', 'GOLDEN RESORT'] }], organizacaoPiloto: 'GOLDEN' });
+  window.eval("entrar({nome:'Supervisor de Governança Teste', cargo:'x', papel:'avaliador', nivel:'N1'})"); window.irPara('avaliador');
+  [...document.querySelectorAll('#t-avaliador button')].find(b => /^Avaliar$/.test(b.textContent.trim())).click();
+  const selo = document.querySelector('#fm-selo');
+  assert.equal(selo.hidden, true, 'vazio fica escondido');
+  /* .selo tem display:flex, que vence o atributo hidden no navegador: a folha precisa da regra própria */
+  assert.equal(window.getComputedStyle(selo).display, 'none', 'escondido de fato, não só marcado');
+  document.querySelectorAll('#t-form input.nota').forEach(i => { i.value = '4'; i.dispatchEvent(new window.Event('input', { bubbles: true })); i.dispatchEvent(new window.Event('change', { bubbles: true })); });
+  document.querySelectorAll('#t-form textarea').forEach(t => { t.value = 'Obs.'; t.dispatchEvent(new window.Event('input', { bubbles: true })); });
+  document.querySelector('#fm-salvar').click(); document.querySelector('#fm-salvar').click();
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(document.querySelector('#fm-selo').hidden, false, 'depois do envio aparece');
+  assert.ok(document.querySelector('#fm-selo').textContent.trim().length > 0);
+  assert.deepEqual(erros.map(String), []);
+});
