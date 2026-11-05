@@ -3222,6 +3222,7 @@ Regras:
     const inferidos = plural(r.inferidos,'inferido','inferidos');
     if(compacto) return `<span>${r.comSuperior} de ${M} com líder · ${inferidos}</span>${r.semSuperior?`<span class="k">${r.semSuperior} sem líder</span>`:''}<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
     const partes = [`${plural(r.definidos,'definido','definidos')} pelo RH`, `${inferidos} pela carga`];
+    if(r.liderDesligado) partes.push(`<span class="k">${plural(r.liderDesligado,'com líder desligado','com líder desligado')}</span>`);
     if(r.comLiderOutraOrigem) partes.push(`${r.comLiderOutraOrigem} com líder de origem não registrada`);
     if(r.semLiderCarga) partes.push(`<span class="k">${r.semLiderCarga} da carga, sem líder</span>`);
     if(r.semLiderRH) partes.push(`<span class="k">${r.semLiderRH} sem líder por decisão do RH</span>`);
@@ -3257,8 +3258,13 @@ Regras:
     const motivo = id => motivos[id] === 'sem_raiz' ? 'sem gerente geral (raiz) definido'
       : `${nomePessoa(LGH.raizDe(S, id).pessoaRef)} não tem atuação no corporativo`;
     const visiveis = new Set(organizacoesVisiveis().map(o=>o.id));
-    return `<div class="ar-faixa${semLigacao.length?'':' neutra'}"><b>Unidades sem ligação ao corporativo: ${semLigacao.length}</b>
-      ${semLigacao.length ? `<ul>${semLigacao.map(id=>`<li>${visiveis.has(id)?`<button data-ir-org="${esc(id)}">${esc(nomeOrg(id))}</button>`:`<b>${esc(nomeOrg(id))}</b>`} <span class="motivo">(${esc(motivo(id))})</span></li>`).join('')}</ul>` : ''}</div>`;
+    /* v40: na Rede sem raiz todas as unidades aparecem aqui (motivo sem_raiz), então a lista nasce recolhida; com raiz, aberta */
+    const redeSemRaiz = !LGH.raizDe(S, CORP);
+    const titulo = `Unidades sem ligação ao corporativo: ${semLigacao.length}`;
+    const lista = semLigacao.length ? `<ul>${semLigacao.map(id=>`<li>${visiveis.has(id)?`<button data-ir-org="${esc(id)}">${esc(nomeOrg(id))}</button>`:`<b>${esc(nomeOrg(id))}</b>`} <span class="motivo">(${esc(motivo(id))})</span></li>`).join('')}</ul>` : '';
+    return `<div class="ar-faixa${semLigacao.length?'':' neutra'}">${lista
+      ? `<details${redeSemRaiz?'':' open'}><summary><b>${titulo}</b>${redeSemRaiz?' <span class="motivo">(defina a raiz da Rede para ligar as unidades)</span>':''}</summary>${lista}</details>`
+      : `<b>${titulo}</b>`}</div>`;
   }
 
   /* ---- render ---- */
@@ -4194,7 +4200,7 @@ Regras:
       if(!x || typeof x.organizacaoId !== 'string' || !Array.isArray(x.alteradas) || !Array.isArray(x.criadas)) continue;
       const delta = {versao: x.versao || 1, alteradas: x.alteradas, criadas: x.criadas, removidasIds: Array.isArray(x.removidasIds) ? x.removidasIds : []};
       /* I3: aplica e confere a árvore da organização; recusado, a organização fica no estado da base e a faixa avisa */
-      const r = P.aplicarDeltaConferido(atuacoes, delta, x.organizacaoId);
+      const r = P.aplicarDeltaConferido(atuacoes, delta, x.organizacaoId, { pessoas: new Set((S.base && S.base.pessoas || []).map(p=>p.id)) });
       if(!r.ok){ recusadas[x.organizacaoId] = r.codigo; falhas.push(x.organizacaoId); docDaOrg[d.id || P.idDocMontagem(x.organizacaoId)] = x.organizacaoId; continue; }
       if(r.ignoradas.length) semBase.push([x.organizacaoId, r.ignoradas.length]);
       if(r.perdidas && r.perdidas.length) perdidas.push([x.organizacaoId, r.perdidas.length]);
@@ -4684,3 +4690,51 @@ Regras:
   };
 })();
 </script>
+<script id="bloco-v40-matriz">
+/* v40 (05/11/2026), M9: os handlers da Matriz passam por uma guarda de permissão (pode), e não só pela ausência do controle.
+   Bloco independente: expõe window.LGH_MATRIZ e religa os selects da Matriz após cada pintura. Remover o bloco devolve o comportamento anterior. */
+(function(){
+  const PERM = { funcao:'editarFuncao', setor:'editarSetor', situacao:'editarSituacao' };
+  function editarCampo(pessoaId, campo, valor){
+    const chave = PERM[campo];
+    if(!chave) return {ok:false, codigo:'campo_invalido'};
+    if(!pode(chave)) return {ok:false, codigo:'sem_permissao'};
+    const org = S.organizacaoSelecionada;
+    const p = PESSOAS.find(x=>x.id===pessoaId);
+    if(!p) return {ok:false, codigo:'pessoa_desconhecida'};
+    if(campo==='situacao'){
+      const r = tentarMudar(`situação de ${p.nome}`, ()=>{
+        if(valor==='Desligado'){ const l = LGH.limparSuperiores(S, p.id, org, autorAtual()); if(!l || l.ok === false) return l || {ok:false, codigo:'erro'}; }
+        LGH.definirCampoPessoa(S, p.id, org, 'situacao', valor);
+        return {ok:true};
+      });
+      pintarMatriz();
+      if(!r.ok) $('#lote-msg').textContent = `Não foi possível mudar a situação de ${p.nome} para ${valor}: ${avisoErro(r.erro)}.`;
+      return r;
+    }
+    mudar(`${campo==='funcao'?'função':'setor'} de ${p.nome}`, ()=>{ LGH.definirCampoPessoa(S, p.id, org, campo, valor); });
+    pintarMatriz();
+    return {ok:true};
+  }
+  const loteOriginal = aplicarLote;
+  aplicarLote = function(supId){
+    if(!pode('definirAvaliador')) return {ok:false, codigo:'sem_permissao'};
+    return loteOriginal(supId);
+  };
+  function aplicarLoteGuardado(acao, supId){
+    if(!pode('definirAvaliador')) return {ok:false, codigo:'sem_permissao'};
+    aplicarLote(acao==='limpar' ? '' : supId);
+    return {ok:true};
+  }
+  const pintarOriginal = pintarMatriz;
+  pintarMatriz = function(){
+    pintarOriginal.apply(this, arguments);
+    const religar = (sel, campo) => document.querySelectorAll(sel).forEach(s=>{
+      s.onchange = ()=>{ const r = editarCampo(s.dataset.fn || s.dataset.st || s.dataset.si, campo, s.value); if(r.ok===false && r.codigo==='sem_permissao') pintarMatriz(); };
+    });
+    religar('[data-fn]','funcao'); religar('[data-st]','setor'); religar('[data-si]','situacao');
+  };
+  window.LGH_MATRIZ = { editarCampo, aplicarLote: aplicarLoteGuardado };
+})();
+</script>
+

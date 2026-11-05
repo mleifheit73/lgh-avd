@@ -144,13 +144,18 @@ function codigoLigacoes(atuacoes, organizacaoId) {
  * Devolve { ok, atuacoes, codigo, ignoradas }: ignoradas são ids de alteradas que a base não tem mais (a carga nova não
  * trouxe a atuação); não recusam, mas a tela informa.
  */
-export function aplicarDeltaConferido(atuacoes, delta, organizacaoId) {
-  const d = delta || {};
+export function aplicarDeltaConferido(atuacoes, delta, organizacaoId, opcoes = {}) {
+  const d0 = delta || {};
   const lista = atuacoes || [];
-  const deOutra = [...(d.alteradas || []), ...(d.criadas || [])].some(a => a.organizacaoId !== organizacaoId);
+  const deOutra = [...(d0.alteradas || []), ...(d0.criadas || [])].some(a => a.organizacaoId !== organizacaoId);
   if (deOutra) return { ok: false, atuacoes: lista, codigo: 'atuacao_de_outra_organizacao', ignoradas: [], perdidas: [] };
   const ids = new Set(lista.map(a => a.id));
-  const ignoradas = (d.alteradas || []).map(a => a.id).filter(id => !ids.has(id)).sort(comparar);
+  /* v40: criada cuja pessoa não existe mais na base (opcoes.pessoas = ids conhecidos) é ignorada e relatada, não vira fantasma */
+  const pessoas = opcoes.pessoas instanceof Set ? opcoes.pessoas : null;
+  const criadasValidas = (d0.criadas || []).filter(a => !pessoas || pessoas.has(a.pessoaRef));
+  const semPessoa = (d0.criadas || []).filter(a => pessoas && !pessoas.has(a.pessoaRef)).map(a => a.id);
+  const d = { ...d0, criadas: criadasValidas };
+  const ignoradas = [...(d.alteradas || []).map(a => a.id).filter(id => !ids.has(id)), ...semPessoa].sort(comparar);
   const depois = aplicarDelta(lista, d);
   /* P30 (decisão de Marcelo, 04/11): superior que saiu na carga nova não derruba a montagem inteira. A atuação volta ao
      vínculo da base (ou fica sem superior, se nasceu no delta), guarda `superiorAnterior` e vira pendência

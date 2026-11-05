@@ -7,7 +7,7 @@
  */
 import { ID_CORPORATIVO } from './modelo/organizacao.js';
 import { semSuperior } from './modelo/atuacao.js';
-import { ehCorrente, rotuloOrigem, precisaDeLider, atuacoesSemLider } from './adaptador.js';
+import { ehCorrente, rotuloOrigem, precisaDeLider, atuacoesSemLider, situacaoFuncional } from './adaptador.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const comparar = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -115,7 +115,11 @@ export function resumoOrganizacao(S, organizacaoId) {
   const lista = correntesDaOrg(S.atuacoes, organizacaoId);
   const raizes = lista.filter(a => a.ehRaiz);
   const noCiclo = lista.filter(a => precisaDeLider(S, a));
-  const comLider = noCiclo.filter(a => a.superiorId != null);
+  /* v40: líder desligado não é líder; a atuação dele fica à parte (liderDesligado), nem "com líder" nem "sem líder" */
+  const porId = new Map(lista.map(a => [a.id, a]));
+  const ligadas = noCiclo.filter(a => a.superiorId != null);
+  const liderDesligadoLista = ligadas.filter(a => { const s = porId.get(a.superiorId); return s && situacaoFuncional(s) === 'Desligado'; });
+  const comLider = ligadas.filter(a => !liderDesligadoLista.includes(a));
   const soltas = atuacoesSemLider(S, organizacaoId);
   const inferidos = comLider.filter(a => a.origem === 'inferido_por_cargo' || a.origem === 'inferido_por_empresa').length;
   const definidos = comLider.filter(a => a.origem === 'definido').length;
@@ -131,6 +135,7 @@ export function resumoOrganizacao(S, organizacaoId) {
     inferidos,                                       // com líder, vínculo inferido pela carga (cargo ou empresa)
     definidos,                                       // com líder, vínculo definido pelo RH
     comLiderOutraOrigem: comLider.length - inferidos - definidos,
+    liderDesligado: liderDesligadoLista.length,         // com superior desligado: precisa de outro líder
     semLiderCarga: soltas.filter(a => a.origem !== 'definido').length,   // a carga não achou líder
     semLiderRH: soltas.filter(a => a.origem === 'definido').length,      // o RH tirou o líder
     semOrganizacao: poolSemOrganizacao(S).length,

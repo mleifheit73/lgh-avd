@@ -457,10 +457,12 @@ export function definirSuperior(S, atuacaoId, superiorAtuacaoId, autor, quando =
   const a = atuacaoPorId(S, atuacaoId);
   return transacao(S, a ? a.organizacaoId : null, () => definirSuperiorSemTransacao(S, atuacaoId, superiorAtuacaoId, autor, quando));
 }
+/** M1 (v40): a raiz é a PESSOA, não só a atuação: nenhuma atuação corrente dela na organização pode ter superior. */
+function pessoaEhRaiz(S, pessoaId, organizacaoId) { return correntesDaPessoa(S, pessoaId, organizacaoId).some(x => x.ehRaiz); }
 function definirSuperiorSemTransacao(S, atuacaoId, superiorAtuacaoId, autor, quando) {
   const a = exigir(S, atuacaoId, 'Atuação');
   const sup = exigir(S, superiorAtuacaoId, 'Superior');
-  if (a.ehRaiz) throw new ErroAdaptador('raiz_com_superior', `A atuação ${a.id} é raiz da organização e não tem superior`, { id: a.id });
+  if (a.ehRaiz || pessoaEhRaiz(S, a.pessoaRef, a.organizacaoId)) throw new ErroAdaptador('raiz_com_superior', `A atuação ${a.id} é da raiz da organização e não tem superior`, { id: a.id });
   if (sup.pessoaRef === a.pessoaRef) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia: a pessoa não pode ser superior de si mesma', { id: a.id });
   if (sup.organizacaoId !== a.organizacaoId) throw new ErroAdaptador('superior_fora_da_organizacao', `O superior ${sup.id} é de outra organização`, { id: a.id, superiorId: sup.id });
   const minhas = correntesDaPessoa(S, a.pessoaRef, a.organizacaoId);
@@ -560,6 +562,7 @@ export function marcarRaiz(S, atuacaoId, autor, quando = hoje()) {
   return transacao(S, a ? a.organizacaoId : null, () => {
     const x = exigir(S, atuacaoId, 'Atuação');
     if (x.superiorId != null) throw new ErroAdaptador('raiz_com_superior', `A atuação ${x.id} tem superior e não pode ser raiz`, { id: x.id });
+    if (correntesDaPessoa(S, x.pessoaRef, x.organizacaoId).some(o => o.id !== x.id && o.superiorId != null)) throw new ErroAdaptador('raiz_com_superior', `${x.pessoaRef} tem outra atuação com superior em ${x.organizacaoId} e não pode ser raiz`, { id: x.id });
     if (x.ehRaiz) return { acao: 'nenhuma', atuacao: x };
     const anteriores = correntesDaOrg(S, x.organizacaoId).filter(r => r.ehRaiz);
     for (const r of anteriores) { r.ehRaiz = false; marcarDefinido(r, autor, quando); }
@@ -584,6 +587,7 @@ export function criarAtuacaoNaOrganizacao(S, { pessoaId, organizacaoId, superior
     const sup = exigir(S, superiorAtuacaoId, 'Superior');
     if (sup.organizacaoId !== organizacaoId) throw new ErroAdaptador('superior_fora_da_organizacao', `O superior ${sup.id} é de outra organização`, { pessoaId, superiorId: sup.id });
     if (sup.pessoaRef === pessoaId) throw new ErroAdaptador('autoavaliacao', 'Ninguém se autoavalia: a pessoa não pode ser superior de si mesma', { pessoaId });
+    if (pessoaEhRaiz(S, pessoaId, organizacaoId)) throw new ErroAdaptador('raiz_com_superior', `${pessoaId} é a raiz de ${organizacaoId} e não ganha superior por outra atuação`, { pessoaId });
     const ja = correntesDaPessoa(S, pessoaId, organizacaoId).find(x => x.superiorId === sup.id);
     if (ja) return { acao: 'nenhuma', atuacao: ja };
     if (estaAcima(S, organizacaoId, pessoaId, sup.pessoaRef)) {
