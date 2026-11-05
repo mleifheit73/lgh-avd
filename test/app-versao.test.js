@@ -41,3 +41,17 @@ test('selo: banco com a mesma versão mostra "latest"; com versão maior mostra 
   assert.match(await comNumero({ 'config/versao': { numero: 37, commit: 'ffffff0' } }), /^v36 · abc1234 · desatualizada$/);
   assert.equal(await comNumero({}), 'v36 · abc1234', 'sem documento, sem rótulo');
 });
+
+test('v41: ao lado de "latest", a data e a hora da publicação; sem registro, a data do build', async () => {
+  const comDados = async (docs, dataBuild) => {
+    const r = await carregarPagina(base(), piloto(), bancoCom(docs), OPCOES);
+    await tick();
+    r.window.VERSAO_APP.numero = '41'; r.window.VERSAO_APP.commit = 'abc1234'; r.window.VERSAO_APP.data = dataBuild;
+    await r.window.LGH_VERSAO.conferir();
+    return r.document.querySelector('#versao-app').textContent;
+  };
+  assert.equal(await comDados({ 'config/versao': { numero: 41, commit: 'abc1234', publicadaEm: '05/11/2026 16:20' } }, '05/11/2026 16:15'), 'v41 · abc1234 · latest · 05/11/2026 16:20');
+  assert.equal(await comDados({ 'config/versao': { numero: 41, commit: 'abc1234', publicadaEm: '2026-11-05' } }, null), 'v41 · abc1234 · latest · 05/11/2026', 'data só com o dia, no formato antigo, é convertida');
+  assert.equal(await comDados({}, '05/11/2026 16:15'), 'v41 · abc1234 · 05/11/2026 16:15', 'sem registro de publicação, vale a data do build');
+  assert.equal(await comDados({ 'config/versao': { numero: 42, commit: 'fff', publicadaEm: '06/11/2026 09:00' } }, '05/11/2026 16:15'), 'v41 · abc1234 · desatualizada · 05/11/2026 16:15', 'desatualizada mostra a data desta, não a da mais nova');
+});

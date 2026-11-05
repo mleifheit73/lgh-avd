@@ -4269,19 +4269,32 @@ Regras:
   if(!pill) return;
   const selo = document.createElement('span');
   selo.className = 'pill versao'; selo.id = 'versao-app';
-  const texto = (estado) => `v${window.VERSAO_APP.numero ?? '?'} · ${window.VERSAO_APP.commit ?? 'sem build'}${estado ? ' · ' + estado : ''}`;
+  /* v41 (pedido de Marcelo, 05/11 16h09): data e hora da última atualização ao lado de "latest".
+     Fonte: publicadaEm do registro de publicação (config/versao); sem ele, a data do build embutida na página. */
+  const formatarData = x => {
+    const t = String(x || '').trim();
+    if(/^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(t)) return t;
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+    return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : null;
+  };
+  let dataPublicada = null;
+  const texto = (estado) => {
+    const data = dataPublicada || formatarData(window.VERSAO_APP.data);
+    return `v${window.VERSAO_APP.numero ?? '?'} · ${window.VERSAO_APP.commit ?? 'sem build'}${estado ? ' · ' + estado : ''}${data ? ' · ' + data : ''}`;
+  };
   selo.textContent = texto('');
   selo.title = window.VERSAO_APP.data ? `Build de ${window.VERSAO_APP.data}` : 'Arquivo fonte, sem build';
   pill.insertAdjacentElement('afterend', selo);
   async function conferir(){
     const db = window.LGH_DB; if(!db || window.VERSAO_APP.numero == null) return;
-    selo.textContent = texto(''); delete selo.dataset.estado;
+    dataPublicada = null; selo.textContent = texto(''); delete selo.dataset.estado;
     try{
       const snap = await db.doc('config/versao').get();
       const d = snap && snap.exists && typeof snap.data === 'function' ? snap.data() : null;
       if(!d || d.numero == null) return;
       const minha = Number(window.VERSAO_APP.numero), atual = Number(d.numero);
       const estado = atual > minha ? 'desatualizada' : atual === minha ? 'latest' : '';
+      dataPublicada = estado === 'latest' ? formatarData(d.publicadaEm) : null;
       selo.textContent = texto(estado); selo.dataset.estado = estado;
       if(estado === 'desatualizada') selo.title = `Existe a versão v${atual} publicada (${d.commit || ''}). Esta é a v${minha}.`;
     }catch(e){ /* sem leitura, fica só o número */ }

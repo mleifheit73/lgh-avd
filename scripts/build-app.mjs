@@ -25,6 +25,12 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gerarBundle } from './build-bundle.mjs';
 
+/** Data e hora no horário de Brasília, no formato do selo de versão: dd/mm/aaaa HH:MM. */
+function dataBrasilia(d) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
+}
+
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (...p) => path.join(raiz, ...p);
 
@@ -231,7 +237,7 @@ function principal() {
       const html = fs.readFileSync(idx, 'utf8')
         .replace("'__VERSAO_NUMERO__'", JSON.stringify(String(numero)))
         .replace("'__VERSAO_COMMIT__'", JSON.stringify(String(commit || 'sem-git').slice(0, 7)))
-        .replace("'__VERSAO_DATA__'", JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')));
+        .replace("'__VERSAO_DATA__'", JSON.stringify(dataBrasilia(new Date())));
       fs.writeFileSync(idx, html);
       console.log(`selo de versão: v${numero} · ${String(commit || 'sem-git').slice(0, 7)}`);
     }
