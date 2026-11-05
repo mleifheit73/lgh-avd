@@ -4560,3 +4560,127 @@ Regras:
   window.LGH_DEVOLUTIVA = { registroAtual, ultimoParecer };
 })();
 </script>
+
+<!-- ===== BLOCO BUSCA NA REDE (v39, 05/11/2026, pedido de Marcelo na reunião de 04/11): na aba Usuários, uma busca que
+     varre toda a base carregada (1.822 pessoas, CLT e PJ) por nome, cargo ou empresa, sem depender da organização
+     selecionada no topo. Cada resultado mostra regime, empresa contratante e a organização atual (ou "Sem organização").
+     "Marcar como líder" troca a organização do topo para a da pessoa e usa o mesmo caminho da Matriz e da Árvore
+     (LGH_LID.definirLider: marca, cria a conta de Avaliador, grava). Quem está sem organização não vira líder aqui:
+     a linha avisa e leva à Árvore (Rede), onde o RH escolhe organização e líder (resposta de Marcelo, 05/11). ===== -->
+<style id="bloco-busca-rede-css">
+#busca-rede{margin:0 0 14px}
+#busca-rede h3{margin:0 0 4px}
+#busca-rede .dica{font-size:.8rem;color:var(--muted);margin:0 0 10px}
+#busca-rede-texto{width:100%;max-width:520px;font:inherit;font-size:.9rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)}
+#busca-rede-contagem{font-size:.8rem;color:var(--muted);margin:8px 0}
+#busca-rede-lista td{vertical-align:top}
+#busca-rede-lista .org{font-size:.8rem;color:var(--muted)}
+#busca-rede-lista .org.sem{color:var(--crit);font-weight:600}
+#busca-rede-msg{font-size:.84rem;margin:8px 0 0}
+#busca-rede-msg.ok{color:var(--accent-ink)}
+#busca-rede-msg.erro{color:var(--crit)}
+</style>
+<script id="bloco-busca-rede">
+(function(){
+  if(typeof renderUsuarios !== 'function' || typeof LGH === 'undefined') return;
+  const PAPEIS_RH = ['rh_unidade','rh_regional','admin'];
+  const semAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  const corrente = a => a.situacao === 'ativa' && a.fim == null;
+  const nomeOrg = id => ((S.organizacoes||[]).find(o=>o.id===id) || {}).nome || id;
+  const noEscopo = id => LGH.organizacoesVisiveis(S).some(o=>o.id===id);
+  function vinculosDe(pid){ return ((S.base && S.base.vinculos) || []).filter(v=>v.pessoaId===pid); }
+  function buscar(texto){
+    const t = semAcento(texto).trim(); if(t.length < 2) return [];
+    const pessoas = (S.base && S.base.pessoas) || [];
+    const out = [];
+    for(const p of pessoas){
+      const vs = vinculosDe(p.id);
+      const alvo = semAcento([p.nome, p.id, ...(p.nomesAlternativos||[]), ...vs.map(v=>v.cargo), ...vs.map(v=>v.empresa), ...vs.map(v=>v.filial)].filter(Boolean).join(' | '));
+      if(!alvo.includes(t)) continue;
+      const ats = (S.atuacoes||[]).filter(a=>a.pessoaRef===p.id && corrente(a));
+      const orgs = [...new Set(ats.map(a=>a.organizacaoId))];
+      out.push({ pessoa: p, vinculos: vs, atuacoes: ats, orgs, lider: ats.some(a=>a.podeLiderar===true) });
+      if(out.length >= 60) break;
+    }
+    return out.sort((x,y)=>x.pessoa.nome.localeCompare(y.pessoa.nome,'pt-BR'));
+  }
+  function linha(r){
+    const regimes = [...new Set(r.vinculos.map(v=>v.regime))].join(' e ') || 'sem vínculo';
+    const empresas = [...new Set(r.vinculos.map(v=>v.filial || v.empresa).filter(Boolean))].join(', ');
+    const cargo = r.vinculos.map(v=>v.cargo).find(Boolean) || 'sem cargo na folha';
+    let orgHtml, acao;
+    if(!r.orgs.length){
+      orgHtml = `<span class="org sem">Sem organização</span>`;
+      acao = `<button type="button" class="linkish" data-ir-arvore="${esc(r.pessoa.id)}">Colocar na Árvore</button>`;
+    } else {
+      orgHtml = r.orgs.map(o=>`<span class="org">${esc(nomeOrg(o))}</span>`).join('<br>');
+      if(r.lider) acao = `<span class="tag t-ok">Já é líder</span>`;
+      else {
+        const dentro = r.orgs.filter(noEscopo);
+        acao = dentro.length
+          ? dentro.map(o=>`<button type="button" class="btn sec" data-marcar-lider="${esc(r.pessoa.id)}" data-org="${esc(o)}">Marcar como líder${r.orgs.length>1?` em ${esc(nomeOrg(o))}`:''}</button>`).join(' ')
+          : `<span class="org">Fora do seu escopo</span>`;
+      }
+    }
+    return `<tr data-pessoa="${esc(r.pessoa.id)}"><td><b>${esc(r.pessoa.nome)}</b><br><span class="org">${esc(cargo)}</span></td><td>${esc(regimes)}<br><span class="org">${esc(empresas)}</span></td><td>${orgHtml}</td><td style="text-align:right">${acao}</td></tr>`;
+  }
+  let caixa = null;
+  function montar(){
+    const tabela = document.querySelector('#us-tabela'); if(!tabela) return null;
+    const scroll = tabela.closest('.scroll') || tabela;
+    caixa = document.querySelector('#busca-rede');
+    if(!caixa){
+      caixa = document.createElement('div'); caixa.id = 'busca-rede'; caixa.className = 'card';
+      caixa.innerHTML = `<h3>Buscar na base da rede</h3>
+        <p class="dica">Procura nas ${(S.base && S.base.pessoas || []).length} pessoas carregadas, CLT e PJ, por nome, cargo ou empresa, em qualquer organização. Marcar como líder cria a conta de avaliador na hora; definir quem a pessoa avalia continua na Árvore ou na Matriz.</p>
+        <input type="search" id="busca-rede-texto" placeholder="Nome, cargo ou empresa (mínimo 2 letras)" aria-label="Buscar na base da rede">
+        <div id="busca-rede-contagem"></div>
+        <div class="scroll" style="border:0"><table id="busca-rede-lista"><thead><tr><th>Pessoa</th><th>Vínculo</th><th>Organização atual</th><th></th></tr></thead><tbody></tbody></table></div>
+        <p id="busca-rede-msg" role="status" aria-live="polite"></p>`;
+      scroll.before(caixa);
+      caixa.querySelector('#busca-rede-texto').addEventListener('input', e => pintar(e.target.value));
+      caixa.addEventListener('click', e => {
+        if(!(e.target instanceof Element)) return;
+        const b = e.target.closest('[data-marcar-lider]'); if(b){ marcar(b.dataset.marcarLider, b.dataset.org); return; }
+        const a = e.target.closest('[data-ir-arvore]'); if(a){ irArvore(a.dataset.irArvore); }
+      });
+    }
+    return caixa;
+  }
+  function pintar(texto){
+    const r = buscar(texto);
+    const tbody = caixa.querySelector('#busca-rede-lista tbody'), cont = caixa.querySelector('#busca-rede-contagem');
+    tbody.innerHTML = r.map(linha).join('');
+    cont.textContent = semAcento(texto).trim().length < 2 ? '' : (r.length ? `${r.length}${r.length>=60?' (primeiros 60)':''} ${r.length===1?'pessoa encontrada':'pessoas encontradas'}` : 'Ninguém com esse texto na base.');
+  }
+  function avisar(t, tipo){ const m = caixa && caixa.querySelector('#busca-rede-msg'); if(m){ m.textContent = t; m.className = tipo || ''; } }
+  function marcar(pid, org){
+    if(!window.LGH_LID || typeof window.LGH_LID.definirLider !== 'function'){ avisar('Marcação de líder indisponível nesta visualização.', 'erro'); return; }
+    if(!noEscopo(org)){ avisar('Organização fora do seu escopo.', 'erro'); return; }
+    try{ if(S.organizacaoSelecionada !== org) trocarOrganizacao(org); }
+    catch(e){ avisar(avisoErro(e), 'erro'); return; }
+    const p = (typeof PESSOAS !== 'undefined' ? PESSOAS : []).find(x=>x.id===pid);
+    if(!p){ avisar('A pessoa não está na organização escolhida.', 'erro'); return; }
+    const r = window.LGH_LID.definirLider(p, true);
+    renderUsuarios();
+    montar();
+    const campo = caixa.querySelector('#busca-rede-texto');
+    avisar(r.msg + (S.organizacaoSelecionada === org ? ` A organização do topo passou a ser ${nomeOrg(org)}.` : ''), r.ok ? 'ok' : 'erro');
+    pintar(campo.value);
+  }
+  function irArvore(pid){
+    S.buscaRedePessoa = pid;
+    try{ trocarOrganizacao(LGH.ID_CORPORATIVO); }catch(e){ avisar(avisoErro(e), 'erro'); return; }
+    irPara('arvore');
+    const painel = document.querySelector('#ar-pool-texto'); const pessoa = (S.base.pessoas||[]).find(x=>x.id===pid);
+    if(painel && pessoa){ painel.value = pessoa.nome; painel.dispatchEvent(new Event('input', {bubbles:true})); }
+  }
+  const renderOriginalBusca = renderUsuarios;
+  renderUsuarios = function(){
+    const r = renderOriginalBusca.apply(this, arguments);
+    if(S.perfil && PAPEIS_RH.includes(S.perfil.papel)){ const c = montar(); if(c){ const campo = c.querySelector('#busca-rede-texto'); if(campo && campo.value) pintar(campo.value); } }
+    else { const c = document.querySelector('#busca-rede'); if(c) c.remove(); caixa = null; }
+    return r;
+  };
+})();
+</script>
